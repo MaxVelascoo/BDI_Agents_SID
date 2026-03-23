@@ -1,0 +1,45 @@
+{
+    "host": "sidfib.mooo.com",
+    "manager": "cmanager-coconut",
+    "service": "cservice-coconut",
+    "axis": [
+        {
+            "rank": "BDISoldier",
+            "name": "bdi_soldier_new_1",
+            "password": "patata",
+            "asl": "bdisoldier.asl"
+        },
+        {
+            "rank": "BDIMedic",
+            "name": "bdi_medic_new_1",
+            "password": "patata",
+            "asl": "bdimedic.asl"
+        },
+        {
+            "rank": "BDIFieldOp",
+            "name": "bdi_fieldop_new_1",
+            "password": "patata",
+            "asl": "bdifieldop.asl"
+        }
+    ],
+    "allied": [
+        {
+            "rank": "BDISoldier",
+            "name": "bdi_soldier_old_1",
+            "password": "patata",
+            "asl": "bdisoldier_old.asl"
+        },
+        {
+            "rank": "BDIMedic",
+            "name": "bdi_medic_old_1",
+            "password": "patata",
+            "asl": "bdimedic_old.asl"
+        },
+        {
+            "rank": "BDIFieldOp",
+            "name": "bdi_fieldop_old_1",
+            "password": "patata",
+            "asl": "bdifieldop_old.asl"
+        }
+    ]
+}

@@ -1,0 +1,64 @@
+{
+    "host": "sidfib.mooo.com",
+    "manager": "cmanager-coconut",
+    "service": "cservice-coconut",
+    "axis": [
+        {
+            "rank": "BDISoldier",
+            "name": "axis_soldier_default",
+            "password": "patata",
+            "asl": "agents/bdisoldier_dummy.asl",
+            "amount": 2
+        },
+        {
+            "rank": "BDIMedic",
+            "name": "axis_medic_default",
+            "password": "patata",
+            "asl": "agents/bdimedic_dummy.asl"
+        },
+        {
+            "rank": "BDIFieldOp",
+            "name": "axis_fieldop_default",
+            "password": "patata",
+            "asl": "agents/bdifieldop_dummy.asl"
+        }
+    ],
+    "allied": [
+        {
+            "rank": "BDISoldier",
+            "name": "my_soldier",
+            "password": "patata",
+            "asl": "agents/bdisoldier.asl"
+        },
+        {
+            "rank": "BDIMedic",
+            "name": "my_medic",
+            "password": "patata",
+            "asl": "agents/bdimedic.asl"
+        },
+        {
+            "rank": "BDIFieldOp",
+            "name": "my_fieldop",
+            "password": "patata",
+            "asl": "agents/bdifieldop.asl"
+        },
+        {
+            "rank": "BDISoldier",
+            "name": "dummy_soldier_allied",
+            "password": "patata",
+            "asl": "agents/bdisoldier_dummy.asl"
+        },
+        {
+            "rank": "BDIMedic",
+            "name": "dummy_medic_allied",
+            "password": "patata",
+            "asl": "agents/bdimedic_dummy.asl"
+        },
+        {
+            "rank": "BDIFieldOp",
+            "name": "dummy_fieldop_allied",
+            "password": "patata",
+            "asl": "agents/bdifieldop_dummy.asl"
+        }
+    ]
+}
