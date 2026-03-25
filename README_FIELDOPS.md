@@ -1,54 +1,54 @@
-# FieldOps Agent - Documentación
+# FIELDOPS AGENT DOCUMENTATION - SID 2026
 
-## Descripción General
+## General Overview
 
-El agente FieldOps es un rol de soporte táctico especializado en suministro de munición. Ha sido diseñado para operar de forma autónoma en entornos multi-agente donde no se garantiza la cooperación con otros agentes del equipo.
+The FieldOps agent is a tactical support role specialized in ammunition supply. It is designed to operate autonomously in multi-agent environments where cooperation with other agents on the team is not guaranteed.
 
-## Filosofía de Diseño
+## Design Philosophy
 
-A diferencia de implementaciones tradicionales que dependen de coordinación implícita, este FieldOps está optimizado para:
+Unlike traditional implementations that rely on implicit coordination, this FieldOps is optimized for:
 
-- **Autonomía total**: No depende de que otros agentes cooperen
-- **Adaptabilidad**: Funciona eficientemente con 3-8 agentes por equipo
-- **Supervivencia CRÍTICA**: Sin respawn, cada muerte es permanente
-- **Eficiencia de recursos**: No desperdicia paquetes de munición
-- **Juego conservador**: Prioriza mantenerse vivo sobre kills agresivos
+- **Full autonomy**: Does not depend on other agents cooperating
+- **Adaptability**: Works efficiently with 3-8 agents per team
+- **CRITICAL survival**: With no respawn, every death is permanent
+- **Resource efficiency**: Does not waste ammunition packs
+- **Conservative gameplay**: Prioritizes staying alive over aggressive kills
 
-## ⚠️ REGLA CRÍTICA: NO HAY RESPAWN
+## CRITICAL RULE: NO RESPAWN
 
-Este agente está diseñado considerando que **no hay respawn**. Esto significa:
+This agent is designed under the assumption that **no respawn** exists. This means:
 
-- Cada muerte es permanente y reduce la capacidad del equipo
-- La supervivencia es MÁS importante que el daño causado
-- Un agente vivo con 20 HP es más valioso que un agente muerto
-- Retroceder no es cobardía, es estrategia óptima
+- Every death is permanent and reduces the team's capacity
+- Survival is MORE important than the damage dealt
+- A living agent with 20 HP is more valuable than a dead one
+- Retreating is not cowardice; it is optimal strategy
 
-## Comportamientos Principales
+## Main Behaviors
 
-### 1. Auto-Preservación (Self-Preservation) - PRIORIDAD MÁXIMA
+### 1. Self-Preservation (Self-Preservation) - MAXIMUM PRIORITY
 
-**Sin respawn, este es el comportamiento MÁS IMPORTANTE del agente.**
+**With no respawn, this is the agent's MOST IMPORTANT behavior.**
 
-El agente monitorea constantemente su salud y actúa en consecuencia:
+The agent constantly monitors its health and acts accordingly:
 
 ```
-Salud < 50  → Retrocede INMEDIATAMENTE a la base
-Salud ≥ 80  → Vuelve a operaciones (con cautela)
-50 ≤ Salud < 70 → Juega defensivamente
+Health < 50  → Retreat IMMEDIATELY to base
+Health ≥ 80  → Return to operations (carefully)
+50 ≤ Health < 70 → Play defensively
 ```
 
-**Cambios respecto a versión con respawn:**
-- Umbral de retroceso aumentado de 30 a 50 (más conservador)
-- Umbral de recuperación aumentado de 60 a 80 (más seguro)
-- Nuevo estado intermedio: salud moderada (juego defensivo)
+**Changes compared to the respawn version:**
+- Retreat threshold increased from 30 to 50 (more conservative)
+- Recovery threshold increased from 60 to 80 (safer)
+- New intermediate state: moderate health (defensive play)
 
-**Ventajas:**
-- Maximiza tiempo de vida del agente
-- Reduce muertes permanentes
-- Mantiene presencia continua en el campo
-- Cada agente vivo es una ventaja numérica
+**Advantages:**
+- Maximizes the agent's time alive
+- Reduces permanent deaths
+- Maintains continuous presence on the field
+- Every living agent is a numerical advantage
 
-**Implementación:**
+**Implementation:**
 ```asl
 +my_health(H): H < 50 & healthy
   <-
@@ -58,28 +58,28 @@ Salud ≥ 80  → Vuelve a operaciones (con cautela)
   .goto(B).
 ```
 
-**Comportamiento durante retroceso:**
-- NO dispara a menos que el enemigo esté a < 30 unidades
-- Solo 1 bala para disuadir, no para matar
-- Prioridad absoluta: llegar a la base
+**Behavior during retreat:**
+- DO NOT shoot unless the enemy is at < 30 units
+- Only 1 bullet to discourage, not to kill
+- Absolute priority: reach the base
 
-### 2. Soporte de Combate Inteligente (Combat Support)
+### 2. Intelligent Combat Support (Combat Support)
 
-**Versión anterior:** Seguía a cualquier aliado detectado visualmente.
+**Previous version:** Followed any ally detected visually.
 
-**Versión mejorada:** Solo sigue aliados que están en combate activo.
+**Improved version:** Only follows allies that are in active combat.
 
-**Condiciones para seguir un aliado:**
-- Detecta un aliado en FOV
-- Detecta enemigos a menos de 100 unidades de distancia
-- No está en modo retroceso
+**Conditions to follow an ally:**
+- Detects an ally in FOV
+- Detects enemies within 100 units of distance
+- Is not in retreat mode
 
-**Ventajas:**
-- No pierde tiempo siguiendo aliados que solo patrullan
-- Concentra recursos donde hay combate real
-- Abandona el seguimiento si el combate termina
+**Advantages:**
+- Doesn't waste time following allies that are only patrolling
+- Concentrates resources where there is real combat
+- Stops following when the combat ends
 
-**Implementación:**
+**Implementation:**
 ```asl
 +friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
   : not following & not retreating & enemies_in_fov(_, _, _, EnemyDist, _, _) & EnemyDist < 100
@@ -89,344 +89,358 @@ Salud ≥ 80  → Vuelve a operaciones (con cautela)
   .goto(FriendPos).
 ```
 
-### 3. Siembra Estratégica (Strategic Seeding)
+### 3. Strategic Seeding (Strategic Seeding)
 
-#### Equipo AXIS (Defensa - Team 200)
+#### Team AXIS (Defense - Team 200)
 
-**Versión anterior:**
-- 3 puntos de control a 25 unidades
-- Ciclo infinito volviendo al inicio
+**Previous version:**
+- 3 control points at 25 units
+- Infinite cycle returning to the start
 
-**Versión mejorada:**
-- 5 puntos de control a 30 unidades (más agresivo)
-- Se queda en el último punto (cerca del enemigo)
-- Crea una línea de suministro hacia territorio enemigo
+**Improved version:**
+- 5 control points at 30 units (more aggressive)
+- Stays at the last point (near the enemy)
+- Creates a supply line toward enemy territory
 
-**Ventajas:**
-- Presión ofensiva constante
-- Mejor cobertura del mapa
-- Posicionamiento avanzado
+**Advantages:**
+- Constant offensive pressure
+- Better map coverage
+- Advanced positioning
 
-#### Equipo ALLIED (Ataque - Team 100)
+#### Team ALLIED (Attack - Team 100)
 
-**Versión anterior:**
-- Soltaba paquete en cada waypoint
+**Previous version:**
+- Dropped a pack at every waypoint
 
-**Versión mejorada:**
-- Solo suelta paquetes cada 2 waypoints
-- Conserva recursos para momentos críticos
+**Improved version:**
+- Only drops packs every 2 waypoints
+- Conserves resources for critical moments
 
-**Ventajas:**
-- No desperdicia munición
-- Llega más rápido al objetivo
-- Más paquetes disponibles para combate
+**Advantages:**
+- Doesn't waste ammunition
+- Reaches the objective faster
+- More packs available for combat
 
-**Implementación:**
+**Implementation:**
 ```asl
 if (S mod 2 == 0) {
-  .reload;  // Solo cada 2 waypoints
+  .reload;  // Only every 2 waypoints
 }
 ```
 
-### 4. Gestión de Recursos
+### 4. Resource Management
 
-**Mejoras implementadas:**
+**Implemented improvements:**
 
-1. **Tracking de drops:** Registra cuándo soltó el último paquete
-2. **Drops condicionales:** Solo suelta en combate real o puntos estratégicos
-3. **No desperdicio:** No suelta paquetes siguiendo aliados aleatorios
+1. **Tracking of drops:** Records when it dropped the last pack
+2. **Conditional drops:** Drops only during real combat or at strategic points
+3. **No waste:** Does not drop packs while following random allies
 
-**Situaciones donde suelta munición:**
-- ✅ En zona de combate activo con aliados
-- ✅ En puntos de control estratégicos (AXIS)
-- ✅ Cada 2 waypoints hacia objetivo (ALLIED)
-- ❌ Siguiendo aliados sin combate
-- ❌ Mientras retrocede
+**Situations where it drops ammunition:**
+- [OK] In an active combat zone with allies
+- [OK] At strategic control points (AXIS)
+- [OK] Every 2 waypoints toward the objective (ALLIED)
+- [X] While following allies without combat
+- [X] While retreating
 
-### 5. Respuesta a Combate (Conservadora)
+### 5. COMBAT RESPONSE MATRIX
 
-El agente tiene diferentes niveles de respuesta según su estado:
+The agent has different response levels depending on its state:
 
-| Estado | Acción al ver enemigo | Balas disparadas | Suelta munición |
-|--------|----------------------|------------------|-----------------|
-| Retrocediendo | Evasión (solo si Dist < 30) | 1 bala | ❌ No |
-| En combate con aliado | Disparo ofensivo | 3 balas | ✅ Sí |
-| Sembrando (sano) | Disparo cauteloso | 2 balas | ❌ No |
-| Salud moderada | Evita combate | 0 balas | ❌ No |
+| State | Action | Bullets | Drops Ammo |
+|--------|--------|---------|-------------|
+| Retreating | Evasion (only if Dist < 30) | 1 bullet | No |
+| Combat with Ally | Offensive (fire) | 3 bullets | Yes |
+| Seeding (Healthy) | Cautious (fire) | 2 bullets | No |
+| Moderate Health | Avoidance | 0 bullets | No |
 
-**Filosofía sin respawn:**
-- Menos balas = menos tiempo expuesto = menos riesgo
-- Solo combate prolongado si hay aliado cerca
-- Evasión > Confrontación cuando está solo
+**No-respawn philosophy:**
+- Less bullets = less exposed time = less risk
+- Only prolonged combat if an ally is nearby
+- Evasion > Confrontation when alone
 
-**Ventajas:**
-- Minimiza riesgo de muerte permanente
-- Conserva munición para momentos críticos
-- Prioriza supervivencia sobre kills
+**Advantages:**
+- Minimizes the risk of permanent death
+- Conserves ammunition for critical moments
+- Prioritizes survival over kills
 
-### 6. Respuesta a Eventos de Bandera
+### 6. Response to Flag Events
 
-#### ALLIED (cuando captura la bandera)
+#### ALLIED (when capturing the flag)
 
-**Versión anterior:** Solo volvía a la base
+**Previous version:** Only returned to base
 
-**Versión mejorada:** 
-- Entra en modo "escolta"
-- Va hacia la base para proteger al portador
-- Suelta munición en el camino
+**Improved version:**
+- Enters "escort" mode
+- Goes to base to protect the flag carrier
+- Drops ammunition along the way
 
-#### AXIS (cuando roban su bandera)
+#### AXIS (when they steal its flag)
 
-**Nuevo comportamiento:**
-- Entra en modo "defensa"
-- Vuelve a la base inmediatamente
-- Defiende la zona de respawn
+**New behavior:**
+- Enters "defense" mode
+- Returns to base immediately
+- Defends the respawn zone
 
-**Ventajas:**
-- Mejor coordinación en momentos críticos
-- Aumenta probabilidad de victoria
-- Respuesta táctica a eventos importantes
+**Advantages:**
+- Better coordination during critical moments
+- Increases the probability of winning
+- Tactical response to important events
 
-## Comparación: Antes vs Después (Sin Respawn)
+## Comparison: Before vs After (No Respawn)
 
-### Antes (Versión Original)
-
-```
-Ventajas:
-+ Simple de entender
-+ Seguimiento constante de aliados
-
-Desventajas:
-- Seguía aliados sin propósito
-- No consideraba su propia salud (FATAL sin respawn)
-- Desperdiciaba paquetes de munición
-- Dependía de cooperación de otros
-- Ciclo de patrulla ineficiente
-- Combate demasiado agresivo (riesgo de muerte permanente)
-```
-
-### Después (Versión Mejorada para No-Respawn)
+### Before (Original Version)
 
 ```
-Ventajas:
-+ Totalmente autónomo
-+ Supervivencia MÁXIMA (retroceso a 50 HP)
-+ Uso eficiente de recursos
-+ Soporte solo en combate real
-+ Posicionamiento estratégico
-+ Adaptable a diferentes escenarios
-+ Juego conservador (minimiza muertes permanentes)
-+ Evasión inteligente cuando está herido
+Advantages:
++ Easy to understand
++ Constant ally following
 
-Desventajas:
-- Más complejo de debuggear
-- Puede parecer "cobarde" (pero es óptimo)
-- Menos kills individuales (pero más victorias de equipo)
+Disadvantages:
+- Followed allies without a purpose
+- Did not consider its own health (FATAL with no respawn)
+- Wasted ammunition packs
+- Relied on other agents cooperating
+- Inefficient patrol cycle
+- Too aggressive combat (permanent-death risk)
 ```
 
-## Impacto del No-Respawn en la Estrategia
-
-### Cambios críticos implementados:
-
-1. **Umbral de retroceso: 30 → 50 HP**
-   - Razón: Con respawn, morir a 30 HP solo cuesta tiempo. Sin respawn, es permanente.
-
-2. **Umbral de recuperación: 60 → 80 HP**
-   - Razón: Volver al combate con 60 HP es arriesgado sin respawn.
-
-3. **Disparo durante retroceso: 2 balas → 1 bala (solo si Dist < 30)**
-   - Razón: Cada segundo disparando es un segundo sin escapar.
-
-4. **Disparo durante seeding: 3 balas → 2 balas**
-   - Razón: Combate prolongado aumenta riesgo de muerte.
-
-5. **Nuevo estado: Salud moderada (50-70 HP)**
-   - Razón: Jugar defensivamente cuando no estás al 100%.
-
-### Matemática de supervivencia:
+### After (Improved Version for No-Respawn)
 
 ```
-Con respawn:
-- Muerte = 30 segundos perdidos
-- Estrategia óptima: Agresiva (maximizar daño)
+Advantages:
++ Fully autonomous
++ MAXIMUM survival (retreat to 50 HP)
++ Efficient use of resources
++ Support only in real combat
++ Strategic positioning
++ Adaptable to different scenarios
++ Conservative gameplay (minimizes permanent deaths)
++ Intelligent evasion when wounded
 
-Sin respawn:
-- Muerte = Agente perdido permanentemente
-- 8 agentes → 7 agentes = -12.5% capacidad de equipo
-- 3 agentes → 2 agentes = -33% capacidad de equipo
-- Estrategia óptima: Conservadora (maximizar supervivencia)
+Disadvantages:
+- Harder to debug
+- May seem "cowardly" (but it's optimal)
+- Fewer individual kills (but more team wins)
 ```
 
-## Estados del Agente
+## Impact of No-Respawn on Strategy
 
-El agente puede estar en uno de estos estados mutuamente excluyentes:
+### Critical changes implemented:
 
-1. **seeding** - Patrullando y soltando paquetes estratégicamente
-2. **following** - Siguiendo un aliado en combate activo
-3. **retreating** - Retrocediendo a base por salud baja
-4. **escorting** - Escoltando portador de bandera (ALLIED)
-5. **defending** - Defendiendo base (AXIS cuando roban bandera)
+1. **Retreat threshold: 30 → 50 HP**
+   - Reason: With respawn, dying at 30 HP only costs time. Without respawn, it's permanent.
 
-## Creencias Principales
+2. **Recovery threshold: 60 → 80 HP**
+   - Reason: Returning to combat with 60 HP is risky without respawn.
 
-Según la documentación de pyGOMAS, estas son las creencias predefinidas disponibles:
+3. **Shooting during retreat: 2 bullets → 1 bullet (only if Dist < 30)**
+   - Reason: Every second firing is a second not escaping.
+
+4. **Shooting during seeding: 3 bullets → 2 bullets**
+   - Reason: Prolonged combat increases death risk.
+
+5. **New state: Moderate health (50-70 HP)**
+   - Reason: Play defensively when you're not at 100%.
+
+### Survival math:
+
+```
+With respawn:
+- Death = 30 seconds lost
+- Optimal strategy: Aggressive (maximize damage)
+
+Without respawn:
+- Death = permanently lost agent
+- 8 agents → 7 agents = -12.5% team capacity
+- 3 agents → 2 agents = -33% team capacity
+- Optimal strategy: Conservative (maximize survival)
+```
+
+## 6. AGENT STATES (ASL)
+
+The agent can be in one of these mutually exclusive states:
+
+1. **seeding** - Patrolling and dropping packs strategically
+2. **following** - Following an ally in active combat
+3. **retreating** - Retreating to base with low health
+4. **escorting** - Escorting the flag carrier (ALLIED)
+5. **defending** - Defending the base (AXIS when they steal the flag)
+
+## 7. PYGOMAS TECHNICAL REFERENCE
+
+Beliefs (and key perceptions) provided by pyGOMAS:
 
 ```asl
-+objective(F)              // Posición del objetivo (bandera enemiga)
-+control_points(C)         // Lista de puntos de control (AXIS)
-+total_control_points(L)   // Número total de puntos
-+patroll_point(P)          // Punto de patrulla actual
-+seed_step(S)              // Contador de paquetes soltados
-+last_pack_drop_time(T)    // Timestamp del último drop
-+healthy                   // Estado de salud normal
-+retreating                // Estado de retroceso
-+following                 // Estado siguiendo aliado
-+combat_zone               // Indica que hay combate activo
-+ally_position(Pos)        // Posición del aliado seguido
++objective(F)              // Objective position (enemy flag)
++control_points(C)         // List of control points (AXIS)
++total_control_points(L)   // Total number of points
++patroll_point(P)          // Current patrol point
++seed_step(S)              // Counter of dropped packs
++last_pack_drop_time(T)    // Timestamp of the last drop
++healthy                   // Normal health state
++retreating                // Retreat state
++following                 // State following an ally
++combat_zone               // Indicates active combat
++ally_position(Pos)        // Position of the followed ally
 ```
 
-**Creencias predefinidas por pyGOMAS (automáticas):**
-- `team(X)` - Equipo del agente (100=Allied, 200=Axis)
-- `base([X,Y,Z])` - Coordenadas de la base
-- `flag([X,Y,Z])` - Posición inicial de la bandera
-- `health(X)` - Salud actual (0-100)
-- `ammo(X)` - Munición actual (0-100)
-- `position([X,Y,Z])` - Posición actual del agente
-- `enemies_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Enemigos visibles
-- `friends_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Aliados visibles
-- `packs_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Packs visibles
-- `target_reached([X,Y,Z])` - Se alcanzó el destino
-- `flag_taken` - La bandera fue capturada
-- `pack_taken(TYPE, N)` - Se recogió un pack
+**Predefined pyGOMAS beliefs (automatic):**
+- `team(X)` - Team of the agent (100=Allied, 200=Axis)
+- `base([X,Y,Z])` - Base coordinates
+- `flag([X,Y,Z])` - Initial flag position
+- `health(X)` - Current health (0-100)
+- `ammo(X)` - Current ammo (0-100)
+- `position([X,Y,Z])` - Current agent position
+- `enemies_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Visible enemies
+- `friends_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Visible allies
+- `packs_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Visible packs
+- `target_reached([X,Y,Z])` - Destination reached
+- `flag_taken` - The flag was captured
+- `pack_taken(TYPE, N)` - A pack was collected
 
-## Acciones Internas Utilizadas
+**Perceptions (pyGOMAS):**
+- `enemies_in_fov(...)`
+- `friends_in_fov(...)`
+- `flag_taken`
 
-Según la documentación de pyGOMAS:
+**Actions used (pyGOMAS):**
+- `.goto([X,Y,Z])`
+- `.shoot(N, [X,Y,Z])`
+- `.reload` (create/drop ammo packs)
 
-**Movimiento:**
+## Internal Actions Used
+
+According to the pyGOMAS documentation:
+
+**Movement:**
 ```asl
-.goto([X,Y,Z])             // Moverse a una posición (usa algoritmo JPS)
-.stop                      // Detener movimiento
-.turn(R)                   // Girar R radianes
-.look_at([X,Y,Z])          // Orientarse hacia una posición
+.goto([X,Y,Z])             // Move to a position (uses the JPS algorithm)
+.stop                      // Stop movement
+.turn(R)                   // Turn by R radians
+.look_at([X,Y,Z])          // Orient toward a position
 ```
 
-**Combate:**
+**Combat:**
 ```asl
-.shoot(N, [X,Y,Z])         // Disparar N balas hacia una posición
+.shoot(N, [X,Y,Z])         // Fire N bullets towards a position
 ```
 
-**Soporte (FieldOps específico):**
+**Support (FieldOps-specific):**
 ```asl
-.reload                    // Soltar paquete de munición (limitado por stamina)
+.reload                    // Drop an ammunition pack (limited by stamina)
 ```
 
-**Servicios (Yellow Pages):**
+**Services (Yellow Pages):**
 ```asl
-.register_service("name")  // Registrar un servicio
-.get_service("name")       // Consultar quién ofrece un servicio
-.get_medics                // Obtener lista de médicos vivos
-.get_fieldops              // Obtener lista de fieldops vivos
-.get_backups               // Obtener lista de soldiers vivos
+.register_service("name")  // Register a service
+.get_service("name")       // Query who offers a service
+.get_medics                // Get list of alive medics
+.get_fieldops              // Get list of alive fieldops
+.get_backups               // Get list of alive soldiers
 ```
 
-**Comunicación:**
+**Communication:**
 ```asl
-.send(Agent, Perf, Msg)    // Enviar mensaje a otro agente
+.send(Agent, Perf, Msg)    // Send a message to another agent
 ```
 
-**Utilidades:**
+**Utilities:**
 ```asl
-.create_control_points([X,Y,Z], D, N, C)  // Crear N puntos a distancia D
-.nth(Index, List, Element)                 // Obtener elemento de lista
-.length(List, L)                           // Longitud de lista
-.wait(Milliseconds)                        // Esperar
+.create_control_points([X,Y,Z], D, N, C)  // Create N points at distance D
+.nth(Index, List, Element)                 // Get list element
+.length(List, L)                           // List length
+.wait(Milliseconds)                        // Wait
 ```
 
-**Nota importante:** `.reload` consume "stamina" del agente, que se regenera con el tiempo. Esto limita cuántos packs puede crear.
+**Important note:** `.reload` consumes the agent's "stamina", which regenerates over time. This limits how many packs it can create.
 
-## Optimizaciones para Evaluación Competitiva
+## Optimizations for Competitive Evaluation
 
-Dado que:
-- Los agentes se mezclarán aleatoriamente con implementaciones de otros grupos
-- No hay respawn (cada muerte es permanente)
-- Mapas aleatorios (14 mapas diferentes posibles)
-- Número de agentes aleatorio (3-8 por equipo)
-- Tiempo máximo: 5 minutos
-- Al menos 1 agente de cada rol garantizado
+Given that:
+- Agents will be mixed randomly with implementations from other groups
+- There is no respawn (every death is permanent)
+- Random maps (14 different possible maps)
+- Random number of agents (3-8 per team)
+- Maximum time: 5 minutes
+- At least 1 agent of each role is guaranteed
 
-Optimizaciones implementadas:
+Implemented optimizations:
 
-1. **No asume cooperación:** Cada decisión es independiente
-2. **Prioriza supervivencia:** Retroceso a 50 HP (antes de estar crítico)
-3. **Recursos eficientes:** No desperdicia packs en aliados aleatorios
-4. **Adaptable:** Funciona con cualquier número de agentes (3-8)
-5. **Posicionamiento agresivo:** Presiona hacia territorio enemigo (AXIS)
-6. **Soporte selectivo:** Solo sigue aliados en combate real
-7. **Evasión inteligente:** Evita combate cuando está herido
-8. **Conservación de stamina:** No crea packs innecesariamente (stamina limitada)
+1. **No cooperation assumption:** Every decision is independent
+2. **Prioritize survival:** Retreat to 50 HP (before you become critical)
+3. **Efficient resources:** Does not waste packs on random allies
+4. **Adaptable:** Works with any number of agents (3-8)
+5. **Aggressive positioning:** Presses toward enemy territory (AXIS)
+6. **Selective support:** Follows allies only in real combat
+7. **Intelligent evasion:** Avoids combat when wounded
+8. **Stamina conservation:** Does not create packs unnecessarily (limited stamina)
 
-## Métricas de Rendimiento Esperadas (Sin Respawn)
+## Expected Performance Metrics (No Respawn)
 
-Comparado con versión original:
+Compared to the original version:
 
-- **Tiempo de vida:** +80% (retroceso más temprano)
-- **Tasa de supervivencia:** +65% (juego más conservador)
-- **Paquetes útiles:** +60% (menos desperdicio)
-- **Soporte en combate:** +80% (solo combate real)
-- **Cobertura de mapa:** +30% (más puntos de control)
-- **Muertes evitadas:** +70% (evasión inteligente)
+- **Time alive:** +80% (earlier retreat)
+- **Survival rate:** +65% (more conservative gameplay)
+- **Useful packs:** +60% (less waste)
+- **Combat support:** +80% (only real combat)
+- **Map coverage:** +30% (more control points)
+- **Deaths avoided:** +70% (intelligent evasion)
 
-**Métrica más importante:** Agentes vivos al final de la partida
+**Most important metric:** Agents alive at the end of the match
 
 ```
-Escenario: 5v5, partida de 5 minutos
+Scenario: 5v5, 5-minute match
 
-Versión agresiva (con mentalidad de respawn):
-- Promedio de muertes: 3-4 agentes
-- Agentes finales: 1-2
+Aggressive version (with respawn mindset):
+- Average deaths: 3-4 agents
+- Final agents: 1-2
 
-Versión conservadora (sin respawn):
-- Promedio de muertes: 1-2 agentes  
-- Agentes finales: 3-4
+Conservative version (no respawn):
+- Average deaths: 1-2 agents
+- Final agents: 3-4
 
-Ventaja numérica final: +100% a +300%
+Final numerical advantage: +100% to +300%
 ```
 
-## Posibles Mejoras Futuras
+## 8. EVALUATION GOAL
 
-1. **Detección de packs de salud:** Ir a buscar medpacks en lugar de volver a base
-2. **Evaluación de amenaza:** Calcular si puede ganar un 1v1 antes de retroceder
-3. **Comunicación entre agentes del mismo grupo:** Coordinar retrocesos
-4. **Predicción de rutas enemigas:** Evitar zonas peligrosas proactivamente
-5. **Ajuste dinámico según agentes restantes:** Más conservador si quedan pocos
-6. **Priorización de aliados por salud:** Seguir aliados heridos para darles munición
-7. **Detección de emboscadas:** Retroceder si detecta múltiples enemigos
+The strategy prioritizes winning the match (Allied capture or Axis defense) over individual performance. Numerical superiority in the endgame is the key to the 20% performance bonus.
 
-## Estrategias Contrarias y Contramedidas
+## Possible Future Improvements
 
-### Si el enemigo juega agresivo:
-- ✅ Ventaja para nosotros: Ellos morirán más
-- ✅ Estrategia: Jugar defensivo, dejar que se desgasten
-- ✅ Endgame: Superioridad numérica
+1. **Health pack detection:** Go and look for medpacks instead of returning to base
+2. **Threat evaluation:** Determine whether it can win a 1v1 before retreating
+3. **Communication between agents in the same group:** Coordinate retreats
+4. **Enemy route prediction:** Proactively avoid dangerous zones
+5. **Dynamic adjustment based on remaining agents:** Play more conservatively when few remain
+6. **Prioritize allies by health:** Follow wounded allies to give them ammunition
+7. **Ambush detection:** Retreat if it detects multiple enemies
 
-### Si el enemigo juega conservador:
-- ⚠️ Partida larga, posible timeout
-- ✅ Estrategia: Presión constante con seeding agresivo
-- ✅ Soldiers deben ser más agresivos (no FieldOps)
+## Counter Strategies and Countermeasures
 
-### Si el enemigo tiene mejor coordinación:
-- ✅ Ventaja: Nuestros agentes son autónomos
-- ✅ No dependemos de coordinación
-- ✅ Funcionamos igual con aliados buenos o malos
+### If the enemy plays aggressively:
+- [OK] Advantage for us: They will die more
+- [OK] Strategy: Play defensively and let them wear themselves down
+- [OK] Endgame: Numerical superiority
 
-## Conclusión
+### If the enemy plays conservatively:
+- [!] Long match, possible timeout
+- [OK] Strategy: Constant pressure with aggressive seeding
+- [OK] Soldiers must be more aggressive (not FieldOps)
 
-Este FieldOps está diseñado específicamente para un entorno **sin respawn** donde:
+### If the enemy has better coordination:
+- [OK] Advantage: Our agents are autonomous
+- [OK] We don't depend on coordination
+- [OK] We work the same with good or bad allies
 
-1. La supervivencia es más valiosa que los kills
-2. Un agente vivo con 20 HP > un agente muerto
-3. La ventaja numérica es decisiva en el endgame
-4. Jugar conservador es matemáticamente óptimo
+## Conclusion
 
-La estrategia prioriza **ganar la guerra, no las batallas individuales**.
+This FieldOps is designed specifically for a **no-respawn** environment where:
+
+1. Survival is more valuable than kills
+2. A living agent with 20 HP > a dead agent
+3. Numerical advantage is decisive in the endgame
+4. Conservative play is mathematically optimal
+
+The strategy prioritizes winning the match (Allied capture or Axis defense) by building numerical superiority in the endgame.
