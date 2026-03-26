@@ -1,22 +1,20 @@
 // ============================================================
-// BDI FIELDOPS AGENT — Incremental Step 6: Flag Events
+// AGENT BDI FIELDOPS — Pas Incremental 6: Esdeveniments de Bandera
 // ============================================================
-// Implemented:
-//   Behavior 1: Self-Preservation (health monitoring + retreat)
-//   Behavior 2: Intelligent Combat Support (ally following in active combat)
-//   Behavior 3: Strategic Seeding (team-based ammo distribution)
-//   Behavior 4: Resource Management (drop gatekeeper + cooldown)
-//   Behavior 5: Combat Response Matrix (state-based firing logic)
-//   Behavior 6: Flag Events (escorting + defending)
+//   Comportament 1: Autopreservació (monitoratge de salut + retirada)
+//   Comportament 2: Suport de Combat Intel·ligent (seguiment d'aliats en combat actiu)
+//   Comportament 3: Sembra Estratègica (distribució de munició per equip)
+//   Comportament 4: Gestió de Recursos (filtre de llançament + cooldown)
+//   Comportament 5: Matriu de Resposta de Combat (lògica de tir per estat)
+//   Comportament 6: Esdeveniments de Bandera (escorta + defensa)
 //
-// All 6 behaviors implemented.
 // ============================================================
 
 // ----------------------------------------------------------
-// INITIALIZATION
+// INICIALITZACIÓ
 // ----------------------------------------------------------
 
-// TEAM_AXIS (200) — set up control points and begin patrolling
+// EQUIP_AXIS (200) — configurar punts de control i començar la patrulla
 +flag(F): team(200)
   <-
   .print("LOG: [FIELDOPS] INIT - Starting as AXIS team, objective=", F);
@@ -33,7 +31,7 @@
   .nth(0, CP, FirstPoint);
   .goto(FirstPoint).
 
-// TEAM_ALLIED (100) — push toward enemy flag
+// EQUIP_ALLIED (100) — avançar cap a la bandera enemiga
 +flag(F): team(100)
   <-
   .print("LOG: [FIELDOPS] INIT - Starting as ALLIED team, objective=", F);
@@ -44,15 +42,14 @@
   .goto(F).
 
 // ----------------------------------------------------------
-// BEHAVIOR 1: SELF-PRESERVATION
+// COMPORTAMENT 1: AUTOPRESERVACIÓ
 // ----------------------------------------------------------
-// NO RESPAWN — survival is the agent's highest priority.
-// Beliefs: healthy / retreating (mutually exclusive)
-// Thresholds: retreat at < 50 HP, recover at >= 80 HP
-// Fallback: if no healing at base, resume ops at current HP
+// Creences: healthy / retreating
+// Llindars: retirada a < 50 HP, recuperació a >= 80 HP
+// Alternativa: si no hi ha curació a la base, reprèn operacions amb els HP actuals
 // ----------------------------------------------------------
 
-// Plan 1 — Trigger retreat when health drops below 50
+// Pla 1 — Activar retirada quan la salut baixa de 50
 +health(H): H < 50 & healthy
   <-
   .print("LOG: [FIELDOPS] CRITICAL_HEALTH - Health=", H, ", RETREATING to base");
@@ -68,7 +65,7 @@
   ?base(B);
   .goto(B).
 
-// Plan 2 — Mid-route recovery (e.g. picked up a medpack while retreating)
+// Pla 2 — Recuperació en ruta (p.ex. ha recollit un medpack mentre es retirava)
 +health(H): H >= 80 & retreating
   <-
   .print("LOG: [FIELDOPS] HEALTH_RESTORED - Health=", H, ", resuming operations");
@@ -78,7 +75,7 @@
   ?objective(F);
   .goto(F).
 
-// Plan 3 — Reached base and fully recovered
+// Pla 3 — Ha arribat a la base i s'ha recuperat completament
 +target_reached(T): retreating & health(H) & H >= 80
   <-
   .print("LOG: [FIELDOPS] RECOVERED_AT_BASE - Health=", H, ", resuming operations");
@@ -89,9 +86,8 @@
   ?objective(F);
   .goto(F).
 
-// Plan 4 — Reached base but NOT healed (FALLBACK)
-// No passive healing in pyGOMAS; waiting forever would waste a team slot.
-// Resume operations at current HP rather than staying idle.
+// Pla 4 — Ha arribat a la base però NO s'ha curat (ALTERNATIVA)
+// Reprèn operacions amb els HP actuals en comptes de quedar-se inactiu.
 +target_reached(T): retreating & health(H) & H < 80
   <-
   .print("LOG: [FIELDOPS] BASE_NO_HEALING - Health=", H, ", no healing available. Resuming ops at current HP");
@@ -102,20 +98,20 @@
   ?objective(F);
   .goto(F).
 
-// Plan 5 — Moderate health warning (50-69 HP, not critical but weakened)
+// Pla 5 — Avís de salut moderada (50-69 HP, no crític però debilitat)
 +health(H): H < 70 & H >= 50 & healthy
   <-
   .print("LOG: [FIELDOPS] MODERATE_HEALTH - Health=", H, ", playing cautiously").
 
 // ----------------------------------------------------------
-// BEHAVIOR 2: INTELLIGENT COMBAT SUPPORT
+// COMPORTAMENT 2: SUPORT DE COMBAT INTEL·LIGENT
 // ----------------------------------------------------------
-// Only follow allies who are in ACTIVE combat (enemies < 100 units).
-// Guards: must be healthy and not retreating.
-// Beliefs: following / combat_zone / ally_position(Pos)
+// Només seguir aliats que estiguin en combat ACTIU (enemics < 100 unitats).
+// Guards: ha d'estar sa i no en retirada.
+// Creences: following / combat_zone / ally_position(Pos)
 // ----------------------------------------------------------
 
-// Plan 6 — Enter combat support: ally in FOV + enemies nearby
+// Pla 6 — Entrar en suport de combat: aliat al FOV + enemics a prop
 +friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
   : not following & not retreating & healthy & not escorting & not defending
   & enemies_in_fov(_, _, _, EnemyDist, _, _) & EnemyDist < 100
@@ -128,7 +124,7 @@
   .look_at(FriendPos);
   .goto(FriendPos).
 
-// Plan 8 — Combat ended: ally visible but no enemies anymore (checked BEFORE Plan 14/7)
+// Pla 8 — Combat acabat: aliat visible però ja no hi ha enemics (es comprova ABANS del Pla 14/7)
 +friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
   : following & combat_zone & not enemies_in_fov(_, _, _, _, _, _)
   <-
@@ -141,8 +137,8 @@
   ?objective(F);
   .goto(F).
 
-// Plan 14 — Combat proximity drop: ally within 30 units during active combat
-// Gatekeeper: ammo > 40, health >= 70, not on cooldown (Behavior 4)
+// Pla 14 — Llançament per proximitat en combat: aliat a menys de 30 unitats durant combat actiu
+// Filtre: munició > 40, salut >= 70, sense cooldown (Comportament 4)
 +friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
   : following & combat_zone & Distance < 30 & not drop_cooldown
   & ammo(A) & A > 40 & health(H) & H >= 70
@@ -155,7 +151,7 @@
   .look_at(FriendPos);
   .goto(FriendPos).
 
-// Plan 7 — Update ally tracking: still in combat, ally moved
+// Pla 7 — Actualitzar seguiment d'aliat: encara en combat, l'aliat s'ha mogut
 +friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
   : following & combat_zone
   <-
@@ -166,10 +162,10 @@
   .goto(FriendPos).
 
 // ----------------------------------------------------------
-// TARGET_REACHED while following (from Behavior 2)
+// TARGET_REACHED mentre segueix un aliat (del Comportament 2)
 // ----------------------------------------------------------
 
-// Plan 9 — Reached ally position while following: resume seeding
+// Pla 9 — Ha arribat a la posició de l'aliat mentre el seguia: reprèn sembra
 +target_reached(T): following
   <-
   .print("LOG: [FIELDOPS] ALLY_REACHED - Arrived at ally position, resuming seeding");
@@ -183,21 +179,21 @@
   .goto(F).
 
 // ----------------------------------------------------------
-// BEHAVIOR 3: STRATEGIC SEEDING (with Behavior 4 gatekeeper)
+// COMPORTAMENT 3: SEEDING ESTRATÈGIC 
 // ----------------------------------------------------------
-// Team-based ammo distribution while patrolling.
-// AXIS (200): drop ammo at each control point to create a supply line.
-// ALLIED (100): drop ammo every 2 waypoints to conserve stamina.
-// Gatekeeper (Behavior 4): .reload requires ALL of:
-//   - ammo(A) > 40 (keep 40% self-defense reserve)
-//   - health(H) >= 70 (no drops at moderate health — focus on evasion)
-//   - not drop_cooldown (one drop per destination cycle)
-// Active only in seeding state (not retreating, not following).
+// Distribució de munició per equip durant la patrulla.
+// AXIS (200): llançar munició a cada punt de control per crear una línia de subministrament.
+// ALLIED (100): llançar munició cada 2 waypoints per conservar energia.
+// Filtre: .reload requereix tots els següents:
+//   - ammo(A) > 40 (mantenir 40% de reserva d'autodefensa)
+//   - health(H) >= 70 (sense llançaments amb salut moderada — prioritzar evasió)
+//   - not drop_cooldown (un llançament per cicle de destinació)
+// Actiu només en estat de seeding (no en retirada, no seguint aliat).
 // ----------------------------------------------------------
 
-// === AXIS (Team 200) — Supply line through control points ===
+// === AXIS (Equip 200) — Línia de subministrament per punts de control ===
 
-// Plan 10 — AXIS seeding: reach control point, conditionally drop ammo, advance
+// Pla 10 — Sembra AXIS: arriba al punt de control, llança munició condicionalment, avança
 +target_reached(T): seeding & team(200) & not retreating & ammo(A) & A > 40
   <-
   -drop_cooldown;
@@ -223,7 +219,7 @@
     .print("LOG: [FIELDOPS] AXIS_HOLD - Reached last point, holding forward position");
   }.
 
-// Plan 11 — AXIS seeding: low ammo, skip drop but keep patrolling
+// Pla 11 — Seeding AXIS: poca munició, no llança però continua patrullant
 +target_reached(T): seeding & team(200) & not retreating & ammo(A) & A <= 40
   <-
   -drop_cooldown;
@@ -240,9 +236,9 @@
     .print("LOG: [FIELDOPS] AXIS_HOLD - Reached last point, holding forward position");
   }.
 
-// === ALLIED (Team 100) — Efficient advance with paced drops ===
+// === ALLIED (Equip 100) — Avanç eficient amb llançaments ===
 
-// Plan 12 — ALLIED seeding: reach waypoint, drop ammo every 2 steps if gatekeeper passes
+// Pla 12 — Seeding ALLIED: arriba al waypoint, llança munició cada 2 passos si el filtre ho permet
 +target_reached(T): seeding & team(100) & not retreating & ammo(A) & A > 40
   <-
   -drop_cooldown;
@@ -258,7 +254,7 @@
   -target_reached(T);
   .goto(F).
 
-// Plan 13 — ALLIED seeding: low ammo, advance without dropping
+// Pla 13 — Seeding ALLIED: poca munició, avança sense llançar
 +target_reached(T): seeding & team(100) & not retreating & ammo(A) & A <= 40
   <-
   -drop_cooldown;
@@ -270,23 +266,13 @@
   .goto(F).
 
 // ----------------------------------------------------------
-// BEHAVIOR 5: COMBAT RESPONSE MATRIX
+// COMPORTAMENT 5: MATRIU DE RESPOSTA DE COMBAT
 // ----------------------------------------------------------
-// State-based firing logic triggered by enemies_in_fov.
-// Plan order = priority (Jason tries top-to-bottom, first match fires).
-// Ammo safety: normal plans require ammo > 5; Plan 20 is last-resort.
-//
-// | State             | Bullets | Condition              |
-// |-------------------|---------|------------------------|
-// | Retreating        | 1       | Dist < 30, ammo > 5   |
-// | Last resort       | 1       | ammo <= 5, Dist < 15   |
-// | Retreating (far)  | 0       | ignore, keep fleeing   |
-// | Moderate health   | 0       | H 50-69, avoid combat  |
-// | Combat with ally  | 3       | following, ammo > 5    |
-// | Seeding (healthy) | 2       | seeding, ammo > 5      |
+// Lògica de tir basada en l'estat, activada per enemies_in_fov.
+// Ordre dels plans = prioritat.
 // ----------------------------------------------------------
 
-// Plan 15 — Retreating evasion: deterrent shot at close threat
+// Pla 15 — Retirada: tir contra enemic proper
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : retreating & Dist < 30 & ammo(A) & A > 5
   <-
@@ -294,7 +280,7 @@
   .look_at(EnemyPos);
   .shoot(1, EnemyPos).
 
-// Plan 20 — Last resort: life-or-death with critical ammo
+// Pla 20 — Últim recurs
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : ammo(A) & A <= 5 & Dist < 15
   <-
@@ -302,19 +288,19 @@
   .look_at(EnemyPos);
   .shoot(1, EnemyPos).
 
-// Plan 16 — Retreating ignore: enemy too far to bother with
+// Pla 16 — Ignorar en retirada: enemic massa lluny per preocupar-se
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : retreating
   <-
   .print("LOG: [FIELDOPS] RETREAT_IGNORE - Enemy ID=", EID, " at dist=", Dist, ", ignoring (fleeing to base)").
 
-// Plan 17 — Moderate health avoidance: no shooting at 50-69 HP
+// Pla 17 — No disparar entre 50-69 HP
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : healthy & health(H) & H < 70 & H >= 50
   <-
   .print("LOG: [FIELDOPS] MODERATE_AVOID - Enemy ID=", EID, " at dist=", Dist, ", Health=", H, ", avoiding combat").
 
-// Plan 18 — Combat with ally: full offensive fire
+// Pla 18 — Combat amb aliat: foc ofensiu.
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : following & combat_zone & ammo(A) & A > 5
   <-
@@ -322,7 +308,7 @@
   .look_at(EnemyPos);
   .shoot(3, EnemyPos).
 
-// Plan 19 — Seeding cautious fire: engage and keep moving
+// Pla 19 — Disparar i continuar movent-se
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : seeding & healthy & ammo(A) & A > 5
   <-
@@ -331,19 +317,17 @@
   .shoot(2, EnemyPos).
 
 // ----------------------------------------------------------
-// BEHAVIOR 6: FLAG EVENTS
+// COMPORTAMENT 6: ESDEVENIMENTS DE BANDERA
 // ----------------------------------------------------------
-// Escorting (ALLIED) and Defending (AXIS) triggered by flag capture.
-// +flag_taken fires when the flag is captured; -flag_taken when returned.
-// ALLIED: escort the flag carrier home (go to base, drop ammo en route).
-// AXIS: defend base against the flag thief (go to base, intercept).
-// Beliefs: escorting / defending (mutually exclusive with seeding/following).
-// Self-Preservation (Behavior 1) always overrides flag events.
+// Escorta (ALLIED) i Defensa (AXIS) activades per captura de bandera.
+// +flag_taken s'activa quan es captura la bandera; -flag_taken quan es retorna.
+// ALLIED: escortar el portador de la bandera cap a casa (anar a la base, llançar munició).
+// AXIS: defensar la base contra el lladre de la bandera (anar a la base, interceptar).
 // ----------------------------------------------------------
 
-// === ALLIED (Team 100) — Escort Mode ===
+// === ALLIED (Equip 100) — Mode Escorta ===
 
-// Plan 21 — ALLIED flag taken: enter escort mode
+// Pla 21 — Bandera capturada ALLIED: entrar en mode escorta
 +flag_taken: team(100) & not retreating
   <-
   .print("LOG: [FIELDOPS] FLAG_ESCORT - Flag captured! Entering escort mode, heading to base");
@@ -358,7 +342,7 @@
   ?base(B);
   .goto(B).
 
-// Plan 22 — ALLIED flag returned/dropped: exit escort, resume seeding
+// Pla 22 — Bandera retornada/perduda ALLIED: sortir d'escorta, reprendre seeding
 -flag_taken: escorting
   <-
   .print("LOG: [FIELDOPS] FLAG_RETURNED - Flag dropped/returned, resuming seeding operations");
@@ -367,7 +351,7 @@
   ?objective(F);
   .goto(F).
 
-// Plan 23 — ALLIED escort: reached base, drop ammo for carrier, hold
+// Pla 23 — Escorta ALLIED: ha arribat a la base, llançar munició pel portador, mantenir posició
 +target_reached(T): escorting & team(100)
   <-
   -target_reached(T);
@@ -380,9 +364,9 @@
     .print("LOG: [FIELDOPS] ESCORT_HOLD - At base, holding position to protect carrier");
   }.
 
-// === AXIS (Team 200) — Defend Mode ===
+// === AXIS (Equip 200) — Mode Defensa ===
 
-// Plan 24 — AXIS flag taken: enter defend mode
+// Pla 24 — Bandera robada AXIS: entrar en mode defensa
 +flag_taken: team(200) & not retreating
   <-
   .print("LOG: [FIELDOPS] FLAG_DEFEND - Flag stolen! Entering defend mode, returning to base");
@@ -395,7 +379,7 @@
   ?base(B);
   .goto(B).
 
-// Plan 25 — AXIS flag recovered: exit defend, resume seeding
+// Pla 25 — Bandera recuperada AXIS: sortir de defensa, reprendre seeding
 -flag_taken: defending
   <-
   .print("LOG: [FIELDOPS] FLAG_RECOVERED - Flag recovered, resuming seeding operations");
@@ -413,7 +397,7 @@
     .goto(F);
   }.
 
-// Plan 26 — AXIS defend: reached base, drop ammo for defenders, hold
+// Pla 26 — Defensa AXIS: ha arribat a la base, llançar munició pels defensors, mantenir posició
 +target_reached(T): defending & team(200)
   <-
   -target_reached(T);
@@ -426,9 +410,9 @@
     .print("LOG: [FIELDOPS] DEFEND_HOLD - At base, holding defensive position");
   }.
 
-// === Combat Response during Flag Events ===
+// === Resposta de Combat durant Esdeveniments de Bandera ===
 
-// Plan 27 — Escort combat: cautious fire while protecting carrier route
+// Pla 27 — Combat en escorta: foc mentre protegeix la ruta del portador
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : escorting & healthy & ammo(A) & A > 5
   <-
@@ -436,7 +420,7 @@
   .look_at(EnemyPos);
   .shoot(2, EnemyPos).
 
-// Plan 28 — Defend combat: aggressive fire to intercept flag thief
+// Pla 28 — Combat en defensa: foc per interceptar el lladre de la bandera
 +enemies_in_fov(EID, Type, Angle, Dist, Health, EnemyPos)
   : defending & healthy & ammo(A) & A > 5
   <-
