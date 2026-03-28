@@ -1,331 +1,362 @@
-# Medic Agent - Documentación
+# MEDIC AGENT DOCUMENTATION - SID 2026
 
-## Descripción General
+## General Overview
 
-El agente Medic es un rol de soporte médico especializado en mantener vivos a los aliados mediante la distribución estratégica de medpacks. Diseñado para operar autónomamente en entornos sin respawn donde cada muerte es permanente.
+The Medic agent is a tactical support role specialized in **health sustain, triage, and survival preservation**. It is designed to operate autonomously in mixed multi-agent teams, where allies may belong to other groups and cannot be assumed to cooperate explicitly.
 
-## Filosofía de Diseño
+## Design Philosophy
 
-Este Medic está optimizado para:
+Unlike simpler medic implementations that only drop medpacks while advancing, this Medic is optimized for:
 
-- **Autonomía total**: No depende de que otros agentes cooperen
-- **Triage inteligente**: Prioriza aliados heridos sobre aliados sanos
-- **Supervivencia CRÍTICA**: Sin respawn, mantenerse vivo es esencial
-- **Eficiencia de recursos**: Stamina limitada, no desperdicia medpacks
-- **Juego conservador**: Prioriza supervivencia sobre agresividad
+- **Full autonomy**: does not require explicit communication with allies
+- **Battlefield triage**: prioritizes nearby wounded allies over blind path-following
+- **Survival-first play**: with no respawn, the medic must stay alive as long as possible
+- **Stable behavior**: avoids getting trapped in incoherent state transitions
+- **Useful healing**: drops medpacks at meaningful moments instead of wasting stamina
 
-## ⚠️ REGLA CRÍTICA: NO HAY RESPAWN
+## CRITICAL RULE: NO RESPAWN
 
-- Cada muerte es permanente y reduce la capacidad del equipo
-- La supervivencia es MÁS importante que el daño causado
-- Un medic vivo puede salvar múltiples aliados
-- Retroceder no es cobardía, es estrategia óptima
+This agent is designed under the assumption that **there is no respawn**. Therefore:
 
-## Comportamientos Principales
+- Every death is permanent and weakens the team
+- A dead medic means losing future healing capacity for the whole team
+- Preserving support roles is strategically valuable in long matches
+- Retreating early is rational, not passive
 
-### 1. Auto-Preservación (Self-Preservation) - PRIORIDAD MÁXIMA
+## Main Behaviors
 
-El agente monitorea constantemente su salud:
+### 1. Self-Preservation - MAXIMUM PRIORITY
+
+**The Medic must stay alive to keep generating value for the team.**
+
+The agent constantly monitors its own health and reacts as follows:
 
 ```
-Salud < 50  → Retrocede INMEDIATAMENTE a la base
-Salud ≥ 80  → Vuelve a operaciones (con cautela)
-50 ≤ Salud < 70 → Juega defensivamente
+Health < 45  → Retreat immediately to base
+Health ≥ 80  → Resume operations
+45 ≤ Health < 70 → Play defensively
 ```
 
-**Cambios respecto a versión básica:**
-- Umbral de retroceso: 50 HP (más conservador)
-- Umbral de recuperación: 80 HP (más seguro)
-- Nuevo estado intermedio: salud moderada
+**Why this matters:**
+- The practice is evaluated in random matches with no respawn, random maps, and random teammates, so survival and consistency are more valuable than risky aggression.
+- The rubric explicitly rewards agents that function correctly, behave coherently, and follow a rational design. The retreat logic directly supports that goal. fileciteturn1file7 fileciteturn1file8
 
-**Comportamiento durante retroceso:**
-- NO dispara a menos que el enemigo esté a < 30 unidades
-- Solo 1 bala para disuadir, no para matar
-- Prioridad absoluta: llegar a la base
-
-### 2. Triage Support (Soporte Médico Inteligente)
-
-**Versión anterior:** Seguía a cualquier aliado detectado visualmente.
-
-**Versión mejorada:** Solo sigue aliados HERIDOS en zonas de combate.
-
-**Condiciones para seguir un aliado:**
-- Aliado con Health < 60 (herido)
-- Enemigos a menos de 100 unidades (zona de combate)
-- No está en modo retroceso
-
-**Ventajas:**
-- Maximiza impacto de los medpacks
-- No pierde tiempo siguiendo aliados sanos
-- Prioriza salvar vidas sobre patrullar
-- Abandona seguimiento si aliado se cura (HP ≥ 70)
-
-**Implementación:**
+**Implementation idea:**
 ```asl
-+friends_in_fov(FriendID, Type, Angle, Distance, Health, FriendPos)
-  : not following & not retreating & Health < 60 & enemies_in_fov(_, _, _, EnemyDist, _, _) & EnemyDist < 100
++health(H): H < 45 & healthy
   <-
+  -healthy;
+  +retreating;
+  ?base(B);
+  .goto(B).
+```
+
+**Behavior during retreat:**
+- Do not commit to combat
+- Only shoot 1 bullet if an enemy is extremely close
+- Prioritize reaching base and recovering
+
+### 2. Triage Support
+
+**Previous weak approach:** moving forward and dropping medpacks on a fixed route regardless of nearby allies.
+
+**Improved version:** the Medic dynamically prioritizes allies based on urgency.
+
+**Triage priorities:**
+- **Urgent ally:** health < 45 and close enough → immediate support
+- **Combat ally:** health < 60 and enemies nearby → follow and assist
+- **Recovered ally:** if the ally reaches a safe HP threshold, return to patrol
+
+**Advantages:**
+- Healing is directed to allies who actually need it
+- The medic behaves more like a support specialist and less like a passive waypoint bot
+- It improves team sustain in skirmishes without depending on explicit coordination
+
+**Implementation idea:**
+```asl
++friends_in_fov(FriendID, Type, Angle, Distance, FriendHealth, FriendPos)
+  : seeding & not retreating & healthy & FriendHealth < 60
+    & enemies_in_fov(_, _, _, EnemyDist, _, _) & EnemyDist < 100
+  <-
+  -seeding;
   +following;
   +combat_zone;
+  +ally_position(FriendPos);
+  +ally_health(FriendHealth);
   .goto(FriendPos).
 ```
 
-### 3. Siembra Estratégica (Strategic Seeding)
+### 3. Structured Seeding
 
-#### Equipo AXIS (Defensa - Team 200)
+The original code advanced differently for each team and, on Allied, could end up repeatedly going to the same objective position. The improved design uses **control points for both teams**, giving the medic a predictable and stable route.
 
-**Versión mejorada:**
-- 5 puntos de control a 30 unidades (más agresivo)
-- Se queda en el último punto (cerca del enemigo)
-- Crea una línea de suministro médico hacia territorio enemigo
+#### Team AXIS (Defense - Team 200)
 
-#### Equipo ALLIED (Ataque - Team 100)
+- Creates 5 control points toward the contested area
+- Advances along them one by one
+- Once it reaches the last point, it holds that advanced position instead of restarting from base
 
-**Versión mejorada:**
-- Solo suelta medpacks cada 2 waypoints
-- Conserva stamina para momentos críticos
-- Llega más rápido al objetivo
+**Advantages:**
+- Maintains a forward defensive presence
+- Leaves healing resources along the lane
+- Avoids erratic movement loops
 
-**Ventajas:**
-- No desperdicia stamina
-- Medpacks disponibles para combate real
-- Mejor cobertura del mapa
+#### Team ALLIED (Attack - Team 100)
 
-### 4. Gestión de Recursos (Stamina)
+- Creates 4 intermediate control points toward the objective
+- Progresses along the attack route in an ordered way
+- Once it reaches the last point, it stays near the objective corridor instead of re-issuing pointless `.goto(flag)` orders
 
-**Importante:** `.cure` consume stamina que se regenera con el tiempo.
+**Advantages:**
+- Avoids the “stand on the flag and keep retriggering” issue
+- Builds a support lane for attackers
+- Makes Allied behavior easier to interpret and debug
 
-**Situaciones donde suelta medpacks:**
-- ✅ En zona de combate con aliado herido (HP < 60)
-- ✅ En puntos de control estratégicos (AXIS)
-- ✅ Cada 2 waypoints hacia objetivo (ALLIED)
-- ❌ Siguiendo aliados sanos
-- ❌ Mientras retrocede
+### 4. Conservative Medpack Placement
 
-### 5. Respuesta a Combate (Conservadora)
+The Medic can create medpacks, so the critical question is **when** to do it.
 
-| Estado | Acción al ver enemigo | Balas disparadas | Suelta medpack |
-|--------|----------------------|------------------|----------------|
-| Retrocediendo | Evasión (solo si Dist < 30) | 1 bala | ❌ No |
-| Con aliado herido | Disparo ofensivo | 3 balas | ✅ Sí |
-| Sembrando (sano) | Disparo cauteloso | 2 balas | ❌ No |
-| Salud moderada | Evita combate | 0 balas | ❌ No |
+**The improved agent drops medpacks mainly in three situations:**
+- At strategic patrol points
+- When it reaches a wounded ally
+- During escort/defense situations around the base
 
-**Filosofía sin respawn:**
-- Menos balas = menos tiempo expuesto = menos riesgo
-- Solo combate prolongado si hay aliado herido cerca
-- Evasión > Confrontación cuando está solo
+**It avoids dropping medpacks:**
+- On every enemy sighting
+- While retreating
+- In low-value movement states with no ally nearby
 
-### 6. Respuesta a Eventos de Bandera
+**Advantages:**
+- Better stamina usage
+- Less wasted support
+- Healing appears where allies are more likely to benefit
 
-#### ALLIED (cuando captura la bandera)
-
-- Entra en modo "escolta"
-- Va hacia la base para proteger al portador
-- Listo para curar al portador si es herido
-
-#### AXIS (cuando roban su bandera)
-
-- Entra en modo "defensa"
-- Vuelve a la base inmediatamente
-- Cura a los defensores en la base
-
-## Comparación: Antes vs Después (Sin Respawn)
-
-### Antes (Versión Original)
-
-```
-Ventajas:
-+ Simple de entender
-+ Seguimiento constante de aliados
-
-Desventajas:
-- Seguía aliados sanos (desperdicio)
-- No consideraba su propia salud (FATAL sin respawn)
-- Desperdiciaba medpacks
-- Dependía de cooperación de otros
-- Combate demasiado agresivo
+**Implementation idea:**
+```asl
+if (S mod 2 == 0) {
+  .cure;
+}
 ```
 
-### Después (Versión Mejorada para No-Respawn)
+### 5. Combat Response Matrix
+
+The Medic is **not** a frontline duelist. Its combat response depends on context:
+
+| State | Action | Bullets | Drops Medpack |
+|--------|--------|---------|---------------|
+| Retreating | Evasion | 1 if enemy is very close | No |
+| Following wounded ally | Support fire | 2 | Yes, if needed |
+| Seeding and healthy | Defensive fire | 2 | Only at control points |
+| Moderate health | Avoid prolonged combat | 0-1 | No |
+
+**Rationale:**
+- The medic’s role in pyGOMAS is to create health packs, not to maximize kills. fileciteturn1file0
+- Short engagements reduce exposure and keep the medic alive longer
+- A living medic can recover team HP repeatedly; a dead medic contributes nothing
+
+### 6. Stable State Transitions
+
+One of the biggest practical risks in AgentSpeak agents is getting stuck in inconsistent beliefs such as following + retreating, or escorting + seeding at the same time.
+
+The improved logic explicitly clears incompatible states when switching mode:
+
+- Retreat cancels seeding, following, escorting, and defending
+- Escort/defense events clear triage beliefs
+- Reaching a followed ally always resolves the follow state cleanly
+
+**Advantages:**
+- More predictable execution
+- Easier debugging
+- Better compliance with the rubric requirement that the agent should not behave erratically. fileciteturn1file8
+
+### 7. Response to Flag Events
+
+#### ALLIED (when the flag is taken)
+
+**Improved behavior:**
+- Stops normal seeding
+- Enters escort mode
+- Returns toward base to support the carrier’s return path
+- Drops a medpack on arrival to reinforce the area
+
+#### AXIS (when the flag is taken)
+
+**Improved behavior:**
+- Stops lane patrol
+- Enters defense mode
+- Returns to base
+- Drops a medpack in the defensive area
+
+**Advantages:**
+- The medic becomes useful in the most critical moments of the match
+- It supports both chase-defense and capture-return scenarios
+- Behavior is aligned with the team objective: Allied must capture, Axis must prevent capture. fileciteturn1file0
+
+## Comparison: Before vs After
+
+### Before (Original Version)
 
 ```
-Ventajas:
-+ Totalmente autónomo
-+ Triage inteligente (solo aliados heridos)
-+ Supervivencia MÁXIMA (retroceso a 50 HP)
-+ Uso eficiente de stamina
-+ Soporte solo en combate real
-+ Posicionamiento estratégico
-+ Juego conservador
-+ Evasión inteligente
+Advantages:
++ Included retreat logic
++ Tried to support wounded allies
++ Had team-dependent behavior
 
-Desventajas:
-- Más complejo de debuggear
-- Puede parecer "pasivo" (pero es óptimo)
-- Menos kills individuales
+Disadvantages:
+- Allied route could collapse into repeated direct goto to the flag
+- Several target_reached plans overlapped and made behavior fragile
+- Healing could trigger too often in combat
+- State cleanup was incomplete
+- last_pack_drop_time was tracked but not really used
+- Following logic could become inconsistent
 ```
 
-## Impacto del No-Respawn en la Estrategia
-
-### Cambios críticos implementados:
-
-1. **Umbral de retroceso: 30 → 50 HP**
-   - Razón: Con respawn, morir a 30 HP solo cuesta tiempo. Sin respawn, es permanente.
-
-2. **Triage selectivo: Todos → Solo heridos (HP < 60)**
-   - Razón: Maximizar impacto de medpacks limitados por stamina.
-
-3. **Disparo durante retroceso: 2 balas → 1 bala (solo si Dist < 30)**
-   - Razón: Cada segundo disparando es un segundo sin escapar.
-
-4. **Abandono de seguimiento: Nunca → Si HP ≥ 70**
-   - Razón: Aliado curado ya no necesita soporte inmediato.
-
-### Matemática de supervivencia:
+### After (Improved Version)
 
 ```
-Valor de un Medic vivo:
-- Puede curar múltiples aliados durante la partida
-- Cada aliado salvado = ventaja numérica mantenida
-- 1 Medic vivo > 3 kills enemigos
+Advantages:
++ More stable finite-state behavior
++ Better triage priorities
++ Cleaner retreat and recovery transitions
++ Structured patrol for both teams
++ More efficient medpack placement
++ Better response to random teammates and maps
++ Easier to justify in the report as a rational role policy
 
-Sin respawn:
-- Medic muerto = Equipo pierde capacidad de curación permanentemente
-- Aliados heridos tienen menos probabilidad de sobrevivir
-- Efecto cascada: más muertes → menos agentes → más muertes
+Disadvantages:
+- More logic branches to test
+- Slightly more conservative than an aggressive medic
+- Still limited by visibility and lack of explicit ally communication
 ```
 
-## Estados del Agente
+## Impact of No-Respawn on Strategy
 
-1. **seeding** - Patrullando y soltando medpacks estratégicamente
-2. **following** - Siguiendo un aliado HERIDO en combate activo
-3. **retreating** - Retrocediendo a base por salud baja
-4. **escorting** - Escoltando portador de bandera (ALLIED)
-5. **defending** - Defendiendo base (AXIS cuando roban bandera)
+### Key changes introduced
 
-## Creencias Principales
+1. **Retreat threshold tightened to 45 HP**
+   - The medic should not gamble its survival once damaged.
+
+2. **Recovery threshold set to 80 HP**
+   - Re-entering combat too early would make the support role disappear quickly.
+
+3. **Reduced combat commitment**
+   - The medic only uses short defensive bursts instead of prolonged exchanges.
+
+4. **Healing tied to tactical contexts**
+   - Patrol points, ally support, escort, and defense are prioritized over random drops.
+
+5. **Control-point route for both teams**
+   - Prevents unstable behavior and makes actions easier to interpret.
+
+## Agent States (ASL)
+
+The agent is organized around these mutually exclusive or carefully managed modes:
+
+1. **seeding** - progressing through strategic control points
+2. **following** - supporting a wounded ally
+3. **retreating** - returning to base to survive
+4. **escorting** - supporting the flag-return phase on Allied
+5. **defending** - reinforcing the base when Axis is under pressure
+6. **combat_zone** - auxiliary belief indicating that the current support is linked to combat
+
+## pyGOMAS Technical Reference
+
+The practice states that the Medic role can create health packs, while the FieldOps provides ammunition. The global objective is still to help the team win under random maps, random team sizes, and mixed-group matches. fileciteturn1file0 fileciteturn1file7
+
+### Beliefs used by the Medic
 
 ```asl
-+objective(F)              // Posición del objetivo (bandera enemiga)
-+control_points(C)         // Lista de puntos de control (AXIS)
-+patroll_point(P)          // Punto de patrulla actual
-+seed_step(S)              // Contador de medpacks soltados
-+last_pack_drop_time(T)    // Timestamp del último drop
-+healthy                   // Estado de salud normal
-+retreating                // Estado de retroceso
-+following                 // Estado siguiendo aliado herido
-+combat_zone               // Indica que hay combate activo
-+ally_position(Pos)        // Posición del aliado seguido
-+ally_health(H)            // Salud del aliado seguido
++objective(F)
++control_points(C)
++total_control_points(L)
++patroll_point(P)
++seed_step(S)
++healthy
++retreating
++following
++escorting
++defending
++combat_zone
++ally_position(Pos)
++ally_health(H)
 ```
 
-**Creencias predefinidas por pyGOMAS:**
-- `health(X)` - Salud actual (0-100)
-- `ammo(X)` - Munición actual (0-100)
-- `friends_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Aliados visibles
-- `enemies_in_fov(ID, TYPE, ANGLE, DIST, HEALTH, [X,Y,Z])` - Enemigos visibles
-- `target_reached([X,Y,Z])` - Se alcanzó el destino
-- `flag_taken` - La bandera fue capturada
+### Relevant built-in perceptions
 
-## Acciones Internas Utilizadas
+- `team(X)`
+- `base([X,Y,Z])`
+- `flag([X,Y,Z])`
+- `health(X)`
+- `ammo(X)`
+- `friends_in_fov(...)`
+- `enemies_in_fov(...)`
+- `target_reached([X,Y,Z])`
+- `flag_taken`
 
-**Soporte (Medic específico):**
+### Actions used
+
 ```asl
-.cure                      // Soltar medpack (limitado por stamina)
+.goto([X,Y,Z])
+.shoot(N, [X,Y,Z])
+.cure
+.create_control_points([X,Y,Z], D, N, C)
+.nth(Index, List, Element)
+.length(List, L)
 ```
 
-**Movimiento:**
-```asl
-.goto([X,Y,Z])             // Moverse a una posición
-.stop                      // Detener movimiento
-```
+## Optimizations for Competitive Evaluation
 
-**Combate:**
-```asl
-.shoot(N, [X,Y,Z])         // Disparar N balas hacia una posición
-```
+Given the evaluation conditions of the practice:
 
-**Utilidades:**
-```asl
-.create_control_points([X,Y,Z], D, N, C)  // Crear N puntos a distancia D
-.nth(Index, List, Element)                 // Obtener elemento de lista
-```
+- random maps
+- random number of agents (3 to 8)
+- random roles with at least one of each
+- mixed teams composed of agents from different groups
+- 5-minute time limit
 
-## Optimizaciones para Evaluación Competitiva
+this Medic is optimized for:
 
-1. **Triage inteligente:** Solo sigue aliados heridos (HP < 60)
-2. **Prioriza supervivencia:** Retroceso a 50 HP
-3. **Recursos eficientes:** No desperdicia stamina en aliados sanos
-4. **Adaptable:** Funciona con 3-8 agentes
-5. **Posicionamiento agresivo:** Presiona hacia territorio enemigo (AXIS)
-6. **Soporte selectivo:** Solo en combate real
-7. **Evasión inteligente:** Evita combate cuando está herido
-8. **Conservación de stamina:** Medpacks cada 2 waypoints (ALLIED)
+1. **Autonomy** - assumes no ally coordination
+2. **Consistency** - avoids erratic loops and unstable states
+3. **Survival** - keeps the healer alive longer
+4. **Support value** - heals where it matters most
+5. **Robustness** - behaves reasonably across many map/team combinations
 
-## Métricas de Rendimiento Esperadas (Sin Respawn)
+These conditions come directly from the practice statement and are central to the design rationale. fileciteturn1file0 fileciteturn1file7
 
-- **Tiempo de vida:** +80% (retroceso más temprano)
-- **Tasa de supervivencia:** +65% (juego más conservador)
-- **Medpacks útiles:** +75% (solo para aliados heridos)
-- **Aliados salvados:** +90% (triage inteligente)
-- **Cobertura de mapa:** +30% (más puntos de control)
-- **Muertes evitadas:** +70% (evasión inteligente)
+## Expected Performance Impact
 
-**Métrica más importante:** Aliados mantenidos vivos
+Compared to the original version, the improved agent should provide:
 
-```
-Escenario: 5v5, partida de 5 minutos
+- **Higher survivability** because retreat and re-entry are clearer
+- **Better support quality** because triage is priority-based
+- **Lower behavioral instability** because state transitions are cleaned up
+- **More interpretable movement** thanks to patrol control points on both teams
+- **Less wasted healing** because medpacks are dropped in tactical contexts
 
-Medic sin triage (sigue a todos):
-- Medpacks desperdiciados: 60%
-- Aliados salvados: 2-3
-- Muerte del medic: Alta probabilidad
+**Most important metric:** keeping the medic alive while still sustaining nearby allies.
 
-Medic con triage (solo heridos):
-- Medpacks desperdiciados: 15%
-- Aliados salvados: 4-6
-- Muerte del medic: Baja probabilidad
+## Evaluation Goal
 
-Impacto: +100% efectividad médica
-```
+The goal is not to maximize kills, but to maximize **team survival and match-winning support**. This is aligned with the practice statement: agents should behave rationally for their role and help their team win. fileciteturn1file9
 
-## Estrategias Contrarias y Contramedidas
+## Possible Future Improvements
 
-### Si el enemigo juega agresivo:
-- ✅ Ventaja para nosotros: Nuestros aliados se curan, los suyos no
-- ✅ Estrategia: Mantenerse cerca de zonas de combate
-- ✅ Endgame: Superioridad numérica por menos bajas
+1. Prioritize the lowest-health ally among multiple visible allies
+2. Distinguish between safe healing and healing under enemy pressure
+3. Predict when to abandon an ally if support would be suicidal
+4. Use communication to coordinate with soldiers or FieldOps from the same group
+5. Detect friendly medpacks already on the ground before creating a new one
+6. Adjust retreat thresholds dynamically depending on remaining time or team size
 
-### Si el enemigo tiene buen medic:
-- ⚠️ Partida larga, guerra de desgaste
-- ✅ Estrategia: Triage más agresivo, curar más rápido
-- ✅ Soldiers deben enfocarse en eliminar medic enemigo
+## Conclusion
 
-### Si el enemigo no tiene medic (murió):
-- ✅ Ventaja masiva: Solo nosotros podemos curar
-- ✅ Estrategia: Jugar más agresivo, presionar
-- ✅ Victoria casi garantizada en guerra de desgaste
+This Medic is designed for a **no-respawn**, **mixed-team**, **randomized** pyGOMAS environment. The strategy emphasizes:
 
-## Sinergia con otros roles
+1. survival before risky aggression,
+2. triage instead of blind healing,
+3. stable state transitions,
+4. useful medpack placement, and
+5. interpretable behavior that can be justified as rational in the final documentation.
 
-**Con Soldiers:**
-- Soldiers atraen fuego, Medic los mantiene vivos
-- Medic permite a Soldiers jugar más agresivo
-- Soldiers protegen al Medic de amenazas
-
-**Con FieldOps:**
-- FieldOps proporciona munición, Medic proporciona salud
-- Cobertura completa de necesidades del equipo
-- Ambos deben coordinar posiciones de packs
-
-## Conclusión
-
-Este Medic está diseñado específicamente para un entorno **sin respawn** donde:
-
-1. Mantener aliados vivos es más valioso que hacer kills
-2. Un Medic vivo puede salvar múltiples aliados
-3. El triage inteligente maximiza el impacto de stamina limitada
-4. La supervivencia del Medic es crítica para el equipo
-
-La estrategia prioriza **salvar vidas, no buscar gloria individual**.
+It is therefore better aligned with the practical requirements of the assignment and easier to defend in the report.
