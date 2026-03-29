@@ -53,7 +53,6 @@
 +friends_in_fov(ID, Type, Angle, Distance, Health, Position)
   : following
   <-
-  .print("LOG: [MEDIC] - ANCHOR_UPDATE - Tracking ally ID=", ID, " new Pos=", Position);
   -ally_position(_);
   +ally_position(Position);
   .goto(Position).

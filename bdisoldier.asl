@@ -1,239 +1,308 @@
-// ============================================================
-// BDI SOLDIER AGENT — Enhanced Autonomous Combatant
-// ============================================================
-// Behaviors:
-//   1. Aggressive Objective Push: capture flag with smart pathfinding
-//   2. Combat Superiority: engage enemies with 2x damage advantage
-//   3. Self-Preservation: retreat when critically wounded
-//   4. Pack Awareness: pick up health/ammo packs opportunistically
-// ============================================================
+/* =========================================================
+   SOLDADO SIMPLE Y AGRESIVO
+   - Shoot siempre de 5
+   - Si tiene poca vida, el medpack es prioridad absoluta
+   - No vuelve a base salvo si lleva la bandera
+   - No persigue enemigos normales
+   - Si roban la bandera AXIS, persigue al carrier
+   ========================================================= */
 
-// ----------------------------------------------------------
-// INITIALIZATION
-// ----------------------------------------------------------
+/* ---------------- INICIALIZACION ---------------- */
 
-// TEAM_AXIS (200) — defend aggressively, intercept enemies
-+flag(F): team(200)
-  <-
-  .print("LOG: [SOLDIER] - INIT - Starting as AXIS team, defending flag at ", F);
-  +objective(F);
-  +my_last_known_flag(F, 0);
-  .create_control_points(F, 35, 4, C);  // Defensive perimeter
-  +control_points(C);
-  .length(C, L);
-  +total_control_points(L);
-  +defending;
-  +patroll_point(0);
-  +healthy.
-
-// TEAM_ALLIED (100) — aggressive flag capture
 +flag(F): team(100)
-  <-
-  .print("LOG: [SOLDIER] - INIT - Starting as ALLIED team, objective flag at ", F);
-  +objective(F);
-  +my_last_known_flag(F, 0);
-  +attacking;
-  +healthy;
-  .goto(F).
+<-
+    .print("[SOLDIER] INIT ALLIED");
+    +engage_count(0);
+    .create_control_points(F, 18, 2, C);
+    +move_points(C);
+    +move_idx(0);
+    !resume_move.
 
-// ----------------------------------------------------------
-// SELF-PRESERVATION — retreat when health is critical
-// ----------------------------------------------------------
++flag(F): team(200)
+<-
+    .print("[SOLDIER] INIT AXIS");
+    +engage_count(0);
+    .create_control_points(F, 10, 3, C);
+    +move_points(C);
+    +move_idx(0);
+    !resume_move.
 
-// Monitor health and retreat if critical (NO RESPAWN!)
-+health(H): H < 40 & healthy & not carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - CRITICAL_HEALTH - Health=", H, ", RETREATING! (No respawn)");
-  -healthy;
-  +retreating;
-  -attacking;
-  -defending;
-  ?base(B);
-  .goto(B).
+/* ---------------- VIDA / MEDPACK ---------------- */
 
-// If carrying flag, be more conservative (retreat earlier)
-+health(H): H < 60 & healthy & carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - FLAG_CARRIER_RETREAT - Health=", H, ", carrying flag, RETREATING!");
-  -healthy;
-  +retreating;
-  ?base(B);
-  .goto(B).
+/* Entrar en modo crítico */
++health(H): H < 45 & not low_health
+<-
+    .print("[SOLDIER] LOW HEALTH");
+    +low_health;
+    +seeking_medpack;
+    -target_enemy(_,_,_);
+    -chasing_carrier;
+    .stop;
+    !seek_medpack.
 
-// Recover when health is restored
-+health(H): H >= 70 & retreating & not carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - HEALTH_RESTORED - Health=", H, ", resuming operations");
-  -retreating;
-  +healthy;
-  ?objective(F);
-  if (team(100)) {
-    +attacking;
-    .goto(F);
-  } else {
+/* Recuperado */
++health(H): H >= 75 & low_health
+<-
+    .print("[SOLDIER] RECOVERED");
+    -low_health;
+    -seeking_medpack;
+    !resume_move.
+
+/* Si recoge medpack, sale del modo crítico */
++pack_taken(1001,_): low_health
+<-
+    .print("[SOLDIER] MEDPACK TAKEN");
+    -low_health;
+    -seeking_medpack;
+    !resume_move.
+
+/* Si está tocado pero no crítico y ve un medpack muy cercano, lo aprovecha */
++health(H): H < 70 & H >= 45 & not low_health & packs_in_fov(_,1001,_,Dist,_,PackPos) & Dist < 15
+<-
+    .print("[SOLDIER] MID HEALTH -> MEDPACK");
+    .stop;
+    .goto(PackPos).
+
+/* Buscar medpack: prioridad absoluta */
++!seek_medpack: low_health & packs_in_fov(_,1001,_,Dist,_,PackPos) & Dist < 35
+<-
+    .print("[SOLDIER] GO MEDPACK");
+    .stop;
+    .goto(PackPos).
+
+/* Si aparece un medpack mientras está crítico, ir inmediatamente */
++packs_in_fov(_,1001,_,Dist,_,PackPos): low_health & seeking_medpack & Dist < 35
+<-
+    .print("[SOLDIER] MEDPACK SEEN");
+    .stop;
+    .goto(PackPos).
+
+/* Si está crítico y no ve medpack, se recoloca en modo defensivo */
++!seek_medpack: low_health
+<-
+    .print("[SOLDIER] LOW HEALTH HOLD");
+    ?flag(F);
+    .stop;
+    .look_at(F).
+
+/* ---------------- BANDERA ---------------- */
+
++flag_taken: team(100) & not low_health
+<-
+    .print("[SOLDIER] FLAG TAKEN -> RETURN");
+    +returning;
+    -target_enemy(_,_,_);
+    -chasing_carrier;
+    -seeking_medpack;
+    .stop;
+    ?base(B);
+    .goto(B).
+
++flag_taken: team(200) & not low_health
+<-
+    .print("[SOLDIER] FLAG STOLEN -> CHASE CARRIER");
     +defending;
-    +patroll_point(0);
-  }.
-
-// If carrying flag and recovered, continue to base
-+health(H): H >= 70 & retreating & carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - FLAG_CARRIER_RECOVERED - Health=", H, ", continuing to base with flag");
-  -retreating;
-  +healthy;
-  ?base(B);
-  .goto(B).
-
-// Monitor ammo
-+ammo(A): A < 15 & not retreating
-  <-
-  .print("LOG: [SOLDIER] - LOW_AMMO - Ammo=", A, ", need to find ammo pack!").
-
-// ----------------------------------------------------------
-// PACK AWARENESS — opportunistically pick up packs
-// ----------------------------------------------------------
-
-// Prioritize health packs if wounded and not carrying flag
-+packs_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : Type == 1001 & health(H) & H < 50 & not carrying_flag & not seeking_pack
-  <-
-  .print("LOG: [SOLDIER] - HEALTH_PACK - Going for health pack at ", Position);
-  +seeking_pack;
-  .goto(Position).
-
-// Prioritize ammo packs if very low on ammo and not carrying flag
-+packs_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : Type == 1002 & ammo(A) & A < 15 & not carrying_flag & not seeking_pack
-  <-
-  .print("LOG: [SOLDIER] - AMMO_PACK - Going for ammo pack at ", Position);
-  +seeking_pack;
-  .goto(Position).
-
-// Resume objective after picking up pack
-+pack_taken(Type, N)
-  : seeking_pack
-  <-
-  .print("LOG: [SOLDIER] - PACK_ACQUIRED - Picked up pack type ", Type, ", resuming objective");
-  -seeking_pack;
-  ?objective(F);
-  if (team(100) & attacking) {
+    +chasing_carrier;
+    -target_enemy(_,_,_);
+    .stop;
+    ?flag(F);
     .goto(F);
-  }.
+    .look_at(F).
 
-// If we reach pack position but didn't pick it up, resume objective
-+target_reached(T): seeking_pack
-  <-
-  .print("LOG: [SOLDIER] - PACK_MISSED - Pack not found, resuming objective");
-  -target_reached(T);
-  -seeking_pack;
-  ?objective(F);
-  if (team(100) & attacking) {
+/* ---------------- COMBATE EN LOW HEALTH ---------------- */
+
+/* Si está crítico y hay medpack cerca, SIEMPRE manda el medpack */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): low_health & seeking_medpack & packs_in_fov(_,1001,_,PDist,_,PackPos) & PDist < 35
+<-
+    .print("[SOLDIER] LOW HEALTH -> IGNORE COMBAT, GO MEDPACK");
+    -target_enemy(_,_,_);
+    .stop;
+    .goto(PackPos).
+
+/* Si está crítico y no hay medpack, solo dispara si el enemigo está muy cerca */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): low_health & seeking_medpack & Dist <= 4
+<-
+    .print("[SOLDIER] LOW HEALTH EMERGENCY FIRE");
+    .stop;
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* Si está crítico y el enemigo no está pegado, no combate: sigue buscando medpack */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): low_health & seeking_medpack & Dist > 4
+<-
+    .print("[SOLDIER] LOW HEALTH IGNORE ENEMY");
+    !seek_medpack.
+
+/* ---------------- PERSECUCION DEL CARRIER ---------------- */
+
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): chasing_carrier & not low_health & not target_enemy(_,_,_)
+<-
+    .print("[SOLDIER] CARRIER TARGET ACQUIRED");
+    .stop;
+    +target_enemy(ID,Pos,HP);
+    .look_at(Pos);
+    .goto(Pos);
+    .shoot(5,Pos).
+
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): chasing_carrier & not low_health & target_enemy(ID,_,_)
+<-
+    -target_enemy(ID,_,_);
+    +target_enemy(ID,Pos,HP);
+    .print("[SOLDIER] CHASE CARRIER FIRE");
+    .look_at(Pos);
+    .goto(Pos);
+    .shoot(5,Pos).
+
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): chasing_carrier & not low_health & target_enemy(TID,_,TH) & ID \== TID & HP < TH
+<-
+    .print("[SOLDIER] SWITCH CHASE TARGET");
+    -target_enemy(_,_,_);
+    +target_enemy(ID,Pos,HP);
+    .look_at(Pos);
+    .goto(Pos);
+    .shoot(5,Pos).
+
+/* ---------------- COMBATE NORMAL ---------------- */
+
+/* Override si hay enemigo pegado */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): not low_health & Dist <= 6
+<-
+    .print("[SOLDIER] CLOSE TARGET OVERRIDE");
+    -target_enemy(_,_,_);
+    .stop;
+    +target_enemy(ID,Pos,HP);
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* Defensa normal */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): defending & not chasing_carrier & not low_health & not target_enemy(_,_,_)
+<-
+    .print("[SOLDIER] DEFEND TARGET");
+    .stop;
+    +target_enemy(ID,Pos,HP);
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* Si no tiene target y ve enemigo */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): not low_health & not returning & not chasing_carrier & not seeking_medpack & not target_enemy(_,_,_)
+<-
+    .print("[SOLDIER] TARGET ACQUIRED");
+    .stop;
+    +target_enemy(ID,Pos,HP);
+    ?engage_count(N);
+    N2 = N + 1;
+    -engage_count(N);
+    +engage_count(N2);
+    if (N2 >= 2) { +cleared_enough; };
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* Mantener target */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): not low_health & not chasing_carrier & target_enemy(ID,_,_)
+<-
+    -target_enemy(ID,_,_);
+    +target_enemy(ID,Pos,HP);
+    .print("[SOLDIER] FIRE");
+    .stop;
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* Si vuelve con bandera */
++enemies_in_fov(ID,Type,Angle,Dist,HP,Pos): returning & not low_health
+<-
+    .print("[SOLDIER] RETURNING FIRE");
+    .look_at(Pos);
+    .shoot(5,Pos).
+
+/* ---------------- LIMPIEZA DE TARGET ---------------- */
+
++target_reached(T): chasing_carrier & target_enemy(_,_,_) & not low_health
+<-
+    .print("[SOLDIER] LOST CARRIER -> SEARCH FLAG");
+    -target_enemy(_,_,_);
+    ?flag(F);
     .goto(F);
-  }.
+    .look_at(F).
 
-// ----------------------------------------------------------
-// COMBAT SUPERIORITY — soldiers deal 2x damage
-// ----------------------------------------------------------
++target_reached(T): defending & target_enemy(_,_,_) & not chasing_carrier
+<-
+    .print("[SOLDIER] DEFENSE CLEAR TARGET");
+    -target_enemy(_,_,_);
+    ?flag(F);
+    .stop;
+    .look_at(F).
 
-// Priority: If retreating, minimize combat
-+enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : retreating & not carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - RETREAT_COMBAT - Enemy ID=", ID, " while retreating");
-  if (Distance < 40) {
-    .shoot(2, Position);  // Quick shots while retreating
-  }.
++target_reached(T): target_enemy(_,_,_) & not returning & not chasing_carrier
+<-
+    .print("[SOLDIER] CLEAR TARGET");
+    -target_enemy(_,_,_);
+    !resume_move.
 
-// If carrying flag and retreating, avoid all combat
-+enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : retreating & carrying_flag
-  <-
-  .print("LOG: [SOLDIER] - FLAG_CARRIER_EVASION - Enemy ID=", ID, ", evading (carrying flag!)").
+/* Si ha llegado a donde cree que está el medpack, sigue comprobando si puede coger más/esperar */
++target_reached(T): low_health & seeking_medpack
+<-
+    .print("[SOLDIER] MEDPACK POSITION REACHED");
+    !seek_medpack.
 
-// Normal combat: aggressive engagement (soldiers = 2x damage)
-+enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : not retreating & healthy
-  <-
-  .print("LOG: [SOLDIER] - COMBAT - >>> ENGAGING ENEMY <<< ID=", ID, " HP=", Health, " Dist=", Distance);
-  .shoot(5, Position).  // 5 shots with 2x damage = devastating
+/* ---------------- MOVIMIENTO NORMAL ---------------- */
 
-// Wounded but not retreating yet: cautious combat
-+enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
-  : not retreating & not healthy
-  <-
-  .print("LOG: [SOLDIER] - WOUNDED_COMBAT - Enemy ID=", ID, ", engaging cautiously");
-  .shoot(3, Position).
++!resume_move: low_health
+<-
+    !seek_medpack.
 
-// ----------------------------------------------------------
-// OBJECTIVE EXECUTION — capture or defend flag
-// ----------------------------------------------------------
++!resume_move: returning
+<-
+    ?base(B);
+    .goto(B).
 
-// ALLIED: Reached flag position, pick it up
-+target_reached(T): attacking & team(100) & objective(F)
-  <-
-  .print("LOG: [SOLDIER] - FLAG_REACHED - At flag position, capturing!");
-  -target_reached(T);
-  +at_flag.
++!resume_move: team(200) & chasing_carrier & not target_enemy(_,_,_) & not low_health
+<-
+    .print("[SOLDIER] SEARCH CARRIER");
+    ?flag(F);
+    .goto(F);
+    .look_at(F).
 
-// ALLIED: Flag captured, return to base
-+flag_taken: team(100)
-  <-
-  .print("LOG: [SOLDIER] - FLAG_CAPTURED - Flag secured! Returning to base");
-  -attacking;
-  -at_flag;
-  +carrying_flag;
-  +returning;
-  ?base(B);
-  .goto(B).
++!resume_move: team(200) & defending & not chasing_carrier & not target_enemy(_,_,_) & not low_health
+<-
+    ?flag(F);
+    .goto(F);
+    .look_at(F).
 
-// ALLIED: Reached base with flag = VICTORY
-+target_reached(T): returning & carrying_flag & team(100)
-  <-
-  .print("LOG: [SOLDIER] - VICTORY - Flag delivered to base! MISSION ACCOMPLISHED!");
-  -target_reached(T);
-  -carrying_flag;
-  -returning.
++!resume_move: team(100) & cleared_enough & not returning & not target_enemy(_,_,_) & not low_health
+<-
+    .print("[SOLDIER] GO FLAG");
+    ?flag(F);
+    .goto(F).
 
-// AXIS: Patrol defensive perimeter
-+patroll_point(P): total_control_points(T) & P < T & defending & team(200)
-  <-
-  .print("LOG: [SOLDIER] - DEFENSIVE_PATROL - Patrol point ", P, "/", T);
-  ?control_points(C);
-  .nth(P, C, A);
-  .goto(A).
++!resume_move: team(100) & not cleared_enough & move_points(C) & move_idx(I) & not returning & not target_enemy(_,_,_) & not low_health
+<-
+    .nth(I,C,P);
+    .print("[SOLDIER] ADVANCE");
+    .goto(P).
 
-// AXIS: Wrap around patrol
-+patroll_point(P): total_control_points(T) & P >= T & defending & team(200)
-  <-
-  .print("LOG: [SOLDIER] - PATROL_CYCLE - Restarting defensive patrol");
-  -patroll_point(P);
-  +patroll_point(0).
++!resume_move: team(200) & move_points(C) & move_idx(I) & not defending & not chasing_carrier & not target_enemy(_,_,_) & not low_health
+<-
+    .nth(I,C,P);
+    .print("[SOLDIER] PATROL");
+    .goto(P).
 
-// AXIS: Reached patrol point, advance
-+target_reached(T): defending & team(200)
-  <-
-  ?patroll_point(P);
-  .print("LOG: [SOLDIER] - PATROL_POINT_REACHED - Advancing to point ", P + 1);
-  -+patroll_point(P + 1);
-  -target_reached(T).
++target_reached(T): move_points(C) & move_idx(I) & not target_enemy(_,_,_) & not returning & not low_health & not chasing_carrier
+<-
+    .length(C,L);
+    I1 = I + 1;
+    if (I1 < L) {
+        I2 = I1;
+    } else {
+        I2 = 0;
+    };
+    -move_idx(I);
+    +move_idx(I2);
+    ?flag(F);
+    .look_at(F);
+    !resume_move.
 
-// AXIS: Flag taken by enemy, aggressive intercept
-+flag_taken: team(200)
-  <-
-  .print("LOG: [SOLDIER] - FLAG_STOLEN - Enemy has flag! INTERCEPTING!");
-  -defending;
-  +intercepting;
-  ?base(B);
-  .goto(B).
-
-// AXIS: Reached base while intercepting
-+target_reached(T): intercepting & team(200)
-  <-
-  .print("LOG: [SOLDIER] - INTERCEPT_POSITION - At base, hunting flag carrier");
-  -target_reached(T).
-
-// Retreating: reached base
-+target_reached(T): retreating
-  <-
-  .print("LOG: [SOLDIER] - BASE_REACHED - At base, recovering");
-  -target_reached(T).
++target_reached(T): defending & not chasing_carrier & not target_enemy(_,_,_) & not low_health
+<-
+    ?flag(F);
+    .stop;
+    .look_at(F).

@@ -60,14 +60,12 @@
 // AXIS patrol: cycle through control points around own base
 +patroll_point(P): total_control_points(T) & P < T & searching & team(200)
   <-
-  .print("LOG: [SOLDIER] - SYSTEMATIC_SEARCH - AXIS patrol point ", P, "/", T, " (defending base perimeter)");
   ?control_points(C);
   .nth(P, C, A);
   .goto(A).
 
 +patroll_point(P): total_control_points(T) & P >= T & searching & team(200)
   <-
-  .print("LOG: [SOLDIER] - SYSTEMATIC_SEARCH - AXIS patrol cycle complete, restarting search loop");
   -patroll_point(P);
   +patroll_point(0).
 
@@ -75,14 +73,12 @@
 +target_reached(T): searching & team(200)
   <-
   ?patroll_point(P);
-  .print("LOG: [SOLDIER] - SYSTEMATIC_SEARCH - AXIS waypoint reached, advancing to patrol point ", P + 1);
   -+patroll_point(P + 1);
   -target_reached(T).
 
 // ALLIED search: move toward the enemy flag location from memory
 +target_reached(T): searching & team(100) & my_last_known_flag(Pos, _)
   <-
-  .print("LOG: [SOLDIER] - SYSTEMATIC_SEARCH - ALLIED pushing toward last known flag at Pos=", Pos);
   -target_reached(T);
   +exploring;
   .goto(Pos).

@@ -1,7 +1,8 @@
 {
-    "host": "sidfib.mooo.com",
+    "host": "localhost",
     "manager": "cmanager-coconut",
     "service": "cservice-coconut",
+
     "axis": [
         {
             "rank": "BDISoldier",
