@@ -1,21 +1,10 @@
-// ============================================================
-// BDI MEDIC AGENT — Simple and stable support
-// ============================================================
-// Main idea:
-//   - Keep the medic moving most of the time
-//   - Only break route for nearby wounded allies
-//   - Heal in combat or at controlled seed points
-//   - Retreat early because survival matters
-// ============================================================
+// Medic BDI - Soporte médico
+// Movilidad constante, curación táctica, supervivencia prioritaria
 
-// ----------------------------------------------------------
-// INITIALIZATION
-// ----------------------------------------------------------
-
-// TEAM_AXIS (200) — patrol toward the flag with control points
+// Init AXIS
 +flag(F): team(200)
   <-
-  .print("LOG: [MEDIC] - INIT - AXIS team, objective=", F);
+  .print("LOG: [MEDIC] INIT AXIS");
   +objective(F);
   .create_control_points(F, 25, 3, C);
   +control_points(C);
@@ -26,24 +15,20 @@
   +healthy;
   +patroll_point(0).
 
-// TEAM_ALLIED (100) — go directly to the flag
+// Init ALLIED
 +flag(F): team(100)
   <-
-  .print("LOG: [MEDIC] - INIT - ALLIED team, objective=", F);
+  .print("LOG: [MEDIC] INIT ALLIED");
   +objective(F);
   +seed_step(0);
   +seeding;
   +healthy;
   .goto(F).
 
-// ----------------------------------------------------------
-// HEALTH / SURVIVAL
-// ----------------------------------------------------------
-
-// Cambio importante: retirada a 45 en vez de 40
+// Salud crítica
 +health(H): H < 45 & healthy
   <-
-  .print("LOG: [MEDIC] - RETREAT - Health=", H);
+  .print("LOG: [MEDIC] RETREAT HP=", H);
   -healthy;
   -seeding;
   -following;
@@ -54,7 +39,7 @@
 
 +health(H): H >= 80 & retreating & team(100)
   <-
-  .print("LOG: [MEDIC] - RECOVERED - Returning to objective");
+  .print("LOG: [MEDIC] RECOVERED");
   -retreating;
   +healthy;
   +seeding;
@@ -63,7 +48,7 @@
 
 +health(H): H >= 80 & retreating & team(200)
   <-
-  .print("LOG: [MEDIC] - RECOVERED - Returning to patrol");
+  .print("LOG: [MEDIC] RECOVERED");
   -retreating;
   +healthy;
   +seeding;
@@ -74,37 +59,31 @@
 
 +target_reached(T): retreating
   <-
-  .print("LOG: [MEDIC] - BASE_REACHED - Holding position");
+  .print("LOG: [MEDIC] BASE_REACHED");
   -target_reached(T).
 
-// ----------------------------------------------------------
-// FOLLOW ONLY NEARBY WOUNDED ALLIES
-// ----------------------------------------------------------
-
-// Start following only if the ally is close and actually needs help
+// Seguir aliados heridos
 +friends_in_fov(ID, Type, Angle, Distance, Health, Position)
   : seeding & not retreating & not following & Distance < 35 & Health < 70
   <-
-  .print("LOG: [MEDIC] - FOLLOW_START - Ally=", ID, " HP=", Health, " Dist=", Distance);
+  .print("LOG: [MEDIC] FOLLOW_START HP=", Health);
   -seeding;
   +following;
   -ally_position(_);
   +ally_position(Position);
   .goto(Position).
 
-// While following, refresh the tracked ally position only if still close and wounded
 +friends_in_fov(ID, Type, Angle, Distance, Health, Position)
   : following & Distance < 45 & Health < 80
   <-
-  .print("LOG: [MEDIC] - FOLLOW_UPDATE - Ally=", ID, " HP=", Health);
+  .print("LOG: [MEDIC] FOLLOW_UPDATE HP=", Health);
   -ally_position(_);
   +ally_position(Position);
   .goto(Position).
 
-// If the medic reaches the ally, heal once and immediately return to route
 +target_reached(T): following & team(100)
   <-
-  .print("LOG: [MEDIC] - FOLLOW_REACHED - Healing and resuming push");
+  .print("LOG: [MEDIC] HEAL_ALLY");
   .cure;
   -target_reached(T);
   -following;
@@ -115,7 +94,7 @@
 
 +target_reached(T): following & team(200)
   <-
-  .print("LOG: [MEDIC] - FOLLOW_REACHED - Healing and resuming patrol");
+  .print("LOG: [MEDIC] HEAL_ALLY");
   .cure;
   -target_reached(T);
   -following;
@@ -126,56 +105,58 @@
   .nth(P, C, Next);
   .goto(Next).
 
-// ----------------------------------------------------------
-// COMBAT
-// ----------------------------------------------------------
+// Combate
++enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
+  : not retreating & Distance <= 6
+  <-
+  .print("LOG: [MEDIC] CLOSE_TARGET");
+  .stop;
+  .look_at(Position);
+  .shoot(5, Position).
 
-// Retreat mode: only minimal self-defense
 +enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
   : retreating
   <-
-  .print("LOG: [MEDIC] - RETREAT_CONTACT - Enemy=", ID);
+  .print("LOG: [MEDIC] RETREAT_FIRE");
+  .stop;
   .look_at(Position);
   if (Distance < 20) {
-    .shoot(1, Position);
+    .shoot(5, Position);
   }.
 
-// If following an ally and combat appears, heal and provide short fire support
 +enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
   : following & ally_position(_)
   <-
-  .print("LOG: [MEDIC] - SUPPORT_CONTACT - Enemy near followed ally");
+  .print("LOG: [MEDIC] SUPPORT_FIRE");
+  .stop;
   .look_at(Position);
   if (Distance < 25) {
     .cure;
   }
-  .shoot(2, Position).
+  .shoot(5, Position).
 
-// While advancing normally, shoot cautiously
 +enemies_in_fov(ID, Type, Angle, Distance, Health, Position)
   : seeding & not retreating
   <-
-  .print("LOG: [MEDIC] - ADVANCE_CONTACT - Enemy=", ID);
+  .print("LOG: [MEDIC] ADVANCE_FIRE");
+  .stop;
   .look_at(Position);
   if (Distance < 20) {
     .cure;
   }
-  .shoot(2, Position).
+  .shoot(5, Position).
 
-// ----------------------------------------------------------
-// AXIS PATROL / SEEDING
-// ----------------------------------------------------------
-
+// Patrulla AXIS
 +patroll_point(P): team(200) & total_control_points(T) & P < T & seeding & not retreating & not following
   <-
-  .print("LOG: [MEDIC] - PATROL_MOVE - Point ", P, "/", T);
+  .print("LOG: [MEDIC] PATROL ", P, "/", T);
   ?control_points(C);
   .nth(P, C, A);
   .goto(A).
 
 +patroll_point(P): team(200) & total_control_points(T) & P >= T & seeding
   <-
-  .print("LOG: [MEDIC] - PATROL_RESET");
+  .print("LOG: [MEDIC] PATROL_RESET");
   -patroll_point(P);
   +patroll_point(0).
 
@@ -183,7 +164,7 @@
   <-
   ?seed_step(S);
   ?patroll_point(P);
-  .print("LOG: [MEDIC] - PATROL_REACHED - Step=", S, " Point=", P);
+  .print("LOG: [MEDIC] PATROL_POINT ", P);
   if (S mod 2 == 0) {
     .cure;
   }
@@ -191,16 +172,11 @@
   -+patroll_point(P + 1);
   -target_reached(T).
 
-// ----------------------------------------------------------
-// ALLIED ADVANCE / SEEDING
-// ----------------------------------------------------------
-
-// If the medic reaches the objective area and is not carrying the flag,
-// stay active there and keep scanning instead of overcomplicating movement.
+// Avance ALLIED
 +target_reached(T): seeding & team(100) & not retreating
   <-
   ?seed_step(S);
-  .print("LOG: [MEDIC] - OBJECTIVE_AREA - Step=", S);
+  .print("LOG: [MEDIC] OBJECTIVE_AREA");
   if (S mod 2 == 0) {
     .cure;
   }
@@ -208,10 +184,10 @@
   .turn(0.5);
   -target_reached(T).
 
-// If THIS medic picks the flag, return to base
+// Bandera capturada
 +flag_taken: team(100)
   <-
-  .print("LOG: [MEDIC] - FLAG_TAKEN - Returning to base");
+  .print("LOG: [MEDIC] FLAG_TAKEN");
   -seeding;
   -following;
   -ally_position(_);
